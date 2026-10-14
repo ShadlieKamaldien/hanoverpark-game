@@ -83,6 +83,76 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
 }
 .preview-controls span { white-space: nowrap; }
 .preview-controls b { color: #f3ecd8; font-size: 9px; margin-right: 4px; letter-spacing: .4px; }
+.preview-interact-prompt {
+  position: absolute;
+  left: 24px;
+  bottom: 104px;
+  max-width: calc(100% - 310px);
+  pointer-events: auto;
+}
+.preview-interact-prompt button {
+  min-height: 44px;
+  border: 1px solid var(--preview-gold);
+  background: var(--preview-gold);
+  color: var(--preview-ink);
+  padding: 12px 18px;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: left;
+  box-shadow: 0 4px 20px #0003;
+}
+.preview-interact-prompt button:hover { background: #ffe0a0; }
+.preview-dialogue-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(180deg, #11272028, #11272070);
+  overflow-y: auto;
+}
+.preview-dialogue-card {
+  width: 600px;
+  max-width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid #a4b594;
+  border-top: 3px solid var(--preview-gold);
+  background: #142820f7;
+  box-shadow: 0 10px 50px #0005;
+  padding: 24px 28px 18px;
+}
+.preview-dialogue-card h2 { margin: 10px 0 14px; font-size: 26px; letter-spacing: -.5px; }
+#preview-dialogue-text { margin: 0 0 20px; color: #e2e8d9; font-size: 15px; line-height: 1.65; white-space: pre-line; }
+.preview-dialogue-choices { display: grid; gap: 8px; }
+.preview-dialogue-choices button {
+  min-height: 44px;
+  border: 1px solid #91a185;
+  background: #22372a;
+  color: #f3ecd8;
+  padding: 12px 15px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.preview-dialogue-choices button:hover { border-color: var(--preview-gold); background: #edbd5926; }
+.preview-dialogue-close {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 12px 15px;
+  border: 0;
+  background: var(--preview-gold);
+  color: var(--preview-ink);
+  text-align: left;
+  font-weight: bold;
+  font-size: 12px;
+}
+.preview-dialogue-close:hover { background: #ffe0a0; }
+.preview-dialogue-close span { float: right; }
+.preview-dialogue-hint { margin: 12px 0 0; font-size: 10px; color: #b8c7b1; }
 .preview-map { position: absolute; right: 24px; bottom: 20px; padding: 9px; width: 240px; border: 1px solid #8fa18270; background: #142820ec; }
 .preview-map-heading { display: flex; justify-content: space-between; padding: 3px 2px 8px; font-weight: bold; font-size: 9px; letter-spacing: 1.5px; }
 .preview-map-heading span:last-child { color: var(--preview-gold); }
@@ -141,6 +211,7 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   .preview-lighting legend { display: none; }
   .preview-lighting button, .preview-small-button { padding: 0 9px; font-size: 8px; }
   .preview-controls { left: 16px; gap: 10px; padding: 10px; max-width: calc(100% - 285px); flex-wrap: wrap; }
+  .preview-interact-prompt { left: 16px; bottom: 124px; max-width: calc(100% - 285px); }
   .preview-map-note { left: 16px; }
   .preview-map { right: 16px; }
   .preview-postcard { display: none; }
@@ -154,6 +225,10 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   .preview-start-controls { margin-top: 13px; font-size: 10px; }
   .preview-source-note { margin-top: 10px; font-size: 9px; }
   .preview-map { bottom: 14px; }
+  .preview-dialogue-overlay { padding: 16px; }
+  .preview-dialogue-card { padding: 18px 22px 14px; }
+  .preview-dialogue-card h2 { font-size: 23px; margin: 8px 0 12px; }
+  #preview-dialogue-text { font-size: 14px; margin-bottom: 14px; }
 }
 @media (max-width: 700px) {
   .preview-masthead { padding: 0 15px; gap: 13px; }
@@ -168,6 +243,10 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   .preview-place h2 { font-size: 16px; }
   .preview-actions { top: 106px; right: 14px; left: 14px; max-width: none; justify-content: flex-start; flex-wrap: wrap; }
   .preview-controls { display: none; }
+  .preview-interact-prompt { left: 14px; bottom: 70px; max-width: calc(100% - 205px); }
+  .preview-interact-prompt button { padding: 10px 12px; font-size: 11px; }
+  .preview-dialogue-overlay { padding: 14px; }
+  .preview-dialogue-card { padding: 18px; }
   .preview-map { width: 174px; right: 14px; bottom: 35px; padding: 6px; }
   #preview-minimap { width: 160px; height: 131px; }
   .preview-map-heading { font-size: 8px; letter-spacing: .8px; }

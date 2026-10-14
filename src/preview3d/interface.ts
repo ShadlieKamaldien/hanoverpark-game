@@ -1,5 +1,10 @@
 export type LightingPreset = "day" | "sunset" | "night";
 export type ViewPreset = "street" | "overview";
+export interface Conversation {
+  speaker: string;
+  text: string;
+  choices: { id: string; label: string }[];
+}
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -19,6 +24,9 @@ export class PreviewInterface {
   onRecenter: (() => void) | null = null;
   onLightingChanged: ((preset: LightingPreset) => void) | null = null;
   onViewChanged: ((preset: ViewPreset) => void) | null = null;
+  onInteract: (() => void) | null = null;
+  onDialogueChoice: ((id: string) => void) | null = null;
+  onDialogueClose: (() => void) | null = null;
 
   private readonly startOverlay = element<HTMLElement>("preview-start");
   private readonly pauseOverlay = element<HTMLElement>("preview-pause");
@@ -27,6 +35,13 @@ export class PreviewInterface {
   private readonly street = element<HTMLElement>("preview-street");
   private readonly position = element<HTMLElement>("preview-position");
   private readonly resumeButton = element<HTMLButtonElement>("preview-resume-button");
+  private readonly interactPrompt = element<HTMLElement>("preview-interact-prompt");
+  private readonly interactButton = element<HTMLButtonElement>("preview-interact");
+  private readonly dialogueOverlay = element<HTMLElement>("preview-dialogue");
+  private readonly dialogueSpeaker = element<HTMLElement>("preview-dialogue-speaker");
+  private readonly dialogueText = element<HTMLElement>("preview-dialogue-text");
+  private readonly dialogueChoices = element<HTMLElement>("preview-dialogue-choices");
+  private readonly dialogueCloseButton = element<HTMLButtonElement>("preview-dialogue-close");
   private readonly lightingButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>("[data-lighting]"),
   );
@@ -39,6 +54,26 @@ export class PreviewInterface {
     this.startButton.addEventListener("click", () => this.onStart?.());
     element<HTMLButtonElement>("preview-pause-button").addEventListener("click", () => this.onPause?.());
     this.resumeButton.addEventListener("click", () => this.onResume?.());
+    this.interactButton.addEventListener("click", () => {
+      if (!this.interactButton.disabled) this.onInteract?.();
+    });
+    this.dialogueCloseButton.addEventListener("click", () => {
+      this.onDialogueClose?.();
+      this.closeDialogue();
+    });
+    this.dialogueOverlay.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      const buttons = Array.from(this.dialogueOverlay.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+      const first = buttons[0], last = buttons[buttons.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    });
     element<HTMLButtonElement>("preview-recenter").addEventListener("click", () => {
       this.onRecenter?.();
       this.canvas.focus({ preventScroll: true });
@@ -83,6 +118,10 @@ export class PreviewInterface {
 
   pause(paused: boolean): void {
     if (!this.started || !this.errorOverlay.hidden) return;
+    if (paused && this.dialogueOpen) {
+      this.onDialogueClose?.();
+      this.closeDialogue();
+    }
     this.paused = paused;
     this.pauseOverlay.hidden = !paused;
     this.hud.inert = paused;
@@ -111,7 +150,51 @@ export class PreviewInterface {
     }
   }
 
+  prompt(text: string | null): void {
+    const label = text?.trim() || null;
+    this.interactPrompt.hidden = label === null;
+    this.interactButton.disabled = label === null;
+    if (label !== null && this.interactButton.textContent !== label) {
+      this.interactButton.textContent = label;
+    }
+  }
+
+  dialogue(conversation: Conversation): void {
+    if (!this.started || this.paused || !this.errorOverlay.hidden) return;
+    this.dialogueSpeaker.textContent = conversation.speaker;
+    this.dialogueText.textContent = conversation.text;
+    this.dialogueChoices.replaceChildren();
+    for (const choice of conversation.choices) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.dialogueChoice = choice.id;
+      button.textContent = choice.label;
+      button.addEventListener("click", () => this.onDialogueChoice?.(choice.id));
+      this.dialogueChoices.append(button);
+    }
+    this.dialogueOverlay.hidden = false;
+    this.hud.inert = true;
+    this.canvas.inert = true;
+    document.documentElement.dataset.previewState = "dialogue";
+    const firstChoice = this.dialogueChoices.querySelector<HTMLButtonElement>("button");
+    (firstChoice ?? this.dialogueCloseButton).focus({ preventScroll: true });
+  }
+
+  closeDialogue(): void {
+    if (!this.dialogueOpen) return;
+    this.dialogueOverlay.hidden = true;
+    this.hud.inert = this.paused;
+    this.canvas.inert = this.paused;
+    document.documentElement.dataset.previewState = this.paused ? "paused" : "playing";
+    if (this.started && !this.paused && this.errorOverlay.hidden) this.canvas.focus({ preventScroll: true });
+  }
+
+  get dialogueOpen(): boolean {
+    return !this.dialogueOverlay.hidden;
+  }
+
   error(message?: string): void {
+    this.closeDialogue();
     this.canvas.setAttribute("aria-busy", "false");
     this.startOverlay.hidden = true;
     this.pauseOverlay.hidden = true;

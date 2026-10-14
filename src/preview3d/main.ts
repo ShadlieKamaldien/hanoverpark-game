@@ -15,6 +15,7 @@ import { gameCoordinates } from "../game/world/mapData";
 import { PreviewInterface, type LightingPreset, type ViewPreset } from "./interface";
 import { BUILDINGS, FIELDS, PREVIEW, ROADS, closestStreet } from "./map";
 import { PreviewPlayer } from "./player";
+import { NeighbourhoodNpcs } from "./npcs";
 import { buildWorld } from "./world";
 import { buildScenery } from "./scenery";
 import { PreviewSky } from "./atmosphere";
@@ -33,6 +34,7 @@ function startPreview() {
   const scenery = buildScenery(scene);
   const sky = new PreviewSky(scene);
   const player = new PreviewPlayer(scene);
+  const npcs = new NeighbourhoodNpcs(scene);
   const target = () => player.mesh.position.add(new Vector3(0, 1.1, 0));
   const views = { street: { beta: 1.18, radius: 18 }, overview: { beta: 0.72, radius: 48 } };
   let viewPreset: ViewPreset = "street";
@@ -48,7 +50,7 @@ function startPreview() {
   camera.inputs.removeByType("ArcRotateCameraKeyboardMoveInput");
   const ambient = new HemisphericLight("sky-fill", Vector3.Up(), scene);
   const characterFill = new HemisphericLight("character-sky-fill", Vector3.Up(), scene);
-  characterFill.includedOnlyMeshes = player.shadowCasters;
+  characterFill.includedOnlyMeshes = [...player.shadowCasters, ...npcs.shadowCasters];
   characterFill.renderPriority = 1;
   characterFill.diffuse = new Color3(0.82, 0.9, 1);
   characterFill.groundColor = new Color3(0.26, 0.31, 0.35);
@@ -63,6 +65,8 @@ function startPreview() {
   shadows.bias = 0.003;
   shadows.normalBias = 0.02;
   for (const mesh of [...world.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters]) shadows.addShadowCaster(mesh);
+  // The merged body gives each neighbour a silhouette without five shadow draws.
+  for (const entity of npcs.actors) shadows.addShadowCaster(entity.actor.shadowCasters[0]);
   // An explicit shadow render list otherwise submits off-screen buildings too.
   const shadowFrustum = Frustum.GetPlanes(shadows.getTransformMatrix());
   shadows.customAllowRendering = (subMesh) => subMesh.getMesh().isInFrustum(shadowFrustum);
@@ -129,6 +133,11 @@ function startPreview() {
     const p = player.position, geo = gameCoordinates(p.x, p.y);
     ui.status(closestStreet(p), `${geo.latitude.toFixed(6)}°, ${geo.longitude.toFixed(6)}°`);
     context.drawImage(background, 0, 0);
+    context.fillStyle = "#89c7bc";
+    for (const entity of npcs.actors) {
+      const nx = ox + (entity.position.x - bounds.minX) * scale, ny = oy + (entity.position.y - bounds.minY) * scale;
+      context.beginPath(); context.arc(nx, ny, entity === npcs.activeNPC ? 3 : 1.8, 0, Math.PI * 2); context.fill();
+    }
     const x = ox + (p.x - bounds.minX) * scale, y = oy + (p.y - bounds.minY) * scale;
     context.fillStyle = "#edbd59"; context.strokeStyle = "#172e26"; context.lineWidth = 2;
     context.beginPath(); context.arc(x, y, 4, 0, Math.PI * 2); context.fill(); context.stroke();
@@ -138,10 +147,37 @@ function startPreview() {
   const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight"]);
   let started = false, paused = false, disposed = false, failed = false;
   let hudElapsed = 0;
+  const closeConversation = () => {
+    keys.clear();
+    npcs.close();
+    ui.closeDialogue();
+    if (started && !paused && !failed) camera.attachControl(ui.canvas, true);
+  };
+  const openConversation = () => {
+    if (!started || paused || failed || ui.dialogueOpen) return;
+    const conversation = npcs.interact(player.position);
+    if (!conversation) return;
+    keys.clear();
+    camera.detachControl();
+    camera.inertialAlphaOffset = 0;
+    camera.inertialBetaOffset = 0;
+    camera.inertialRadiusOffset = 0;
+    ui.prompt(null);
+    ui.dialogue(conversation);
+  };
+  ui.onInteract = openConversation;
+  ui.onDialogueChoice = (id) => {
+    keys.clear();
+    const conversation = npcs.choose(id);
+    if (conversation) ui.dialogue(conversation);
+    else closeConversation();
+  };
+  ui.onDialogueClose = closeConversation;
   const setPaused = (value: boolean) => {
     if (!started || failed) return;
     paused = value;
     keys.clear();
+    if (value) { closeConversation(); ui.prompt(null); }
     if (value) camera.detachControl(); else camera.attachControl(ui.canvas, true);
     ui.pause(value);
   };
@@ -162,9 +198,14 @@ function startPreview() {
   ui.setView(viewPreset);
   ui.onLightingChanged = lightScene;
   const keydown = (event: KeyboardEvent) => {
-    if (!started || failed || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
-    if (event.code === "Escape" && !event.repeat) { event.preventDefault(); setPaused(!paused); }
-    if (!paused && movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
+    if (!started || failed || event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.code === "Escape" && !event.repeat) {
+      event.preventDefault();
+      if (ui.dialogueOpen) closeConversation(); else setPaused(!paused);
+      return;
+    }
+    if (event.code === "KeyE" && !event.repeat) { event.preventDefault(); openConversation(); return; }
+    if (!paused && !ui.dialogueOpen && movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
   };
   const keyup = (event: KeyboardEvent) => { keys.delete(event.code); };
   const blur = () => { keys.clear(); setPaused(true); };
@@ -179,6 +220,7 @@ function startPreview() {
     if (import.meta.env.DEV && error) console.error(error);
     failed = true;
     keys.clear();
+    npcs.close();
     camera.detachControl();
     engine.stopRenderLoop();
     ui.error("The 3D preview couldn’t start. Check that your browser supports WebGL, or play the 2D game.");
@@ -193,21 +235,27 @@ function startPreview() {
     try {
       const dt = Math.min(engine.getDeltaTime() / 1000, 0.1);
       if (started && !paused) {
-        player.update(dt, keys, camera.getForwardRay().direction);
+        if (!ui.dialogueOpen) player.update(dt, keys, camera.getForwardRay().direction);
         camera.setTarget(Vector3.Lerp(camera.target, target(), Math.min(1, dt * 12)), false, false, true);
       }
+      npcs.update(dt, player.position, !started || paused);
       sun.position.copyFrom(target().subtract(sun.direction.scale(100)));
       Frustum.GetPlanesToRef(shadows.getTransformMatrix(), shadowFrustum);
       sky.update(camera.position, sun.direction);
       const nearby = [...world.lamps].sort((a, b) => Vector3.DistanceSquared(a, player.mesh.position) - Vector3.DistanceSquared(b, player.mesh.position));
       streetlights.forEach((light, i) => light.position.copyFrom(nearby[i]));
       hudElapsed += dt;
-      if (hudElapsed >= 0.12) { updateLocation(); hudElapsed = 0; }
+      if (hudElapsed >= 0.12) {
+        updateLocation();
+        const neighbour = started && !paused && !ui.dialogueOpen ? npcs.nearest(player.position) : null;
+        ui.prompt(neighbour ? `E · Speak to ${neighbour.name}` : null);
+        hudElapsed = 0;
+      }
       scene.render();
     } catch (error) { fail(error); }
   });
   if (import.meta.env.DEV) {
-    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
+    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
   }
   const pagehide = (event: PageTransitionEvent) => {
     if (event.persisted) blur();
@@ -223,7 +271,7 @@ function startPreview() {
     window.removeEventListener("resize", resize);
     document.removeEventListener("visibilitychange", visibility);
     window.removeEventListener("pagehide", pagehide);
-    player.dispose(); scene.dispose(); engine.dispose();
+    npcs.dispose(); player.dispose(); scene.dispose(); engine.dispose();
   };
   window.addEventListener("pagehide", pagehide);
   if (import.meta.hot) import.meta.hot.dispose(dispose);

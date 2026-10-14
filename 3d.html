@@ -38,7 +38,10 @@
             <button id="preview-recenter" class="preview-small-button" type="button" aria-label="Recenter the camera on your character">RECENTER</button>
             <button id="preview-pause-button" class="preview-small-button" type="button" aria-label="Pause the 3D preview">PAUSE <span>II</span></button>
           </div>
-          <p id="preview-controls" class="preview-controls"><span><b>WASD / ARROWS</b> Walk</span><span><b>SHIFT</b> Sprint</span><span><b>DRAG</b> Orbit</span><span><b>WHEEL</b> Zoom</span><span><b>ESC</b> Pause</span></p>
+          <div id="preview-interact-prompt" class="preview-interact-prompt" hidden>
+            <button id="preview-interact" type="button" disabled>E · Greet a neighbour</button>
+          </div>
+          <p id="preview-controls" class="preview-controls"><span><b>WASD / ARROWS</b> Walk</span><span><b>SHIFT</b> Sprint</span><span><b>E</b> Greet / speak</span><span><b>DRAG</b> Orbit</span><span><b>WHEEL</b> Zoom</span><span><b>ESC</b> Pause</span></p>
           <aside class="preview-map" aria-label="Neighbourhood minimap">
             <div class="preview-map-heading"><span>HANOVER PARK</span><span>N ↑</span></div>
             <canvas id="preview-minimap" width="220" height="180" aria-label="Minimap showing the mapped streets and your position"></canvas>
@@ -51,13 +54,13 @@
           <div class="preview-menu">
             <span class="preview-eyebrow">3D PREVIEW · DOWNBERG ROAD</span>
             <h1 id="preview-start-title">THE FLATS.<br /><span>ANOTHER ANGLE.</span></h1>
-            <p class="preview-intro">Take a walk through the mapped streets. Explore the flats, balcony gardens and courtyards around Downberg Road, then pull back for a view of the neighbourhood.</p>
+            <p class="preview-intro">Take a walk through the mapped streets. Explore the flats and courtyards around Downberg Road, greet the neighbours, then pull back for a view of the neighbourhood.</p>
             <p id="preview-loading" class="preview-loading" role="status">Getting the neighbourhood ready…</p>
             <button id="preview-start-button" class="preview-primary" type="button" disabled>ENTER 3D PREVIEW <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
-            <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom · <b>ESC</b> Pause</p>
+            <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint · <b>E</b> Greet / speak<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom · <b>ESC</b> Pause</p>
             <p class="preview-keyboard-note">Keyboard and mouse needed for this preview.</p>
-            <p class="preview-source-note">Real mapped streets. Original architecture.<br />This preview is for exploring; missions are in the 2D game.</p>
+            <p class="preview-source-note">Real mapped streets. Original architecture and characters.<br />Walk and talk here; missions are in the 2D game.</p>
           </div>
           <div class="preview-postcard" aria-hidden="true"><span>CAPE TOWN, SOUTH AFRICA</span><b>DOWNBERG ROAD<br />HANOVER PARK</b><small>33°59′ S · 18°31′ E</small></div>
           <a class="preview-start-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
@@ -69,7 +72,17 @@
             <p class="preview-intro">Your walk will continue where you left off.</p>
             <button id="preview-resume-button" class="preview-primary" type="button">CONTINUE EXPLORING <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
-            <p class="preview-source-note">WASD / arrows to walk · Shift to sprint<br />Drag to orbit · Wheel to zoom · Esc to resume</p>
+            <p class="preview-source-note">WASD / arrows to walk · Shift to sprint · E to greet / speak<br />Drag to orbit · Wheel to zoom · Esc to resume</p>
+          </div>
+        </section>
+        <section id="preview-dialogue" class="preview-dialogue-overlay" role="dialog" aria-modal="true" aria-labelledby="preview-dialogue-speaker" aria-describedby="preview-dialogue-text" hidden>
+          <div class="preview-dialogue-card">
+            <span class="preview-eyebrow">ON THE STREET</span>
+            <h2 id="preview-dialogue-speaker"></h2>
+            <p id="preview-dialogue-text"></p>
+            <div id="preview-dialogue-choices" class="preview-dialogue-choices" aria-label="Your reply"></div>
+            <button id="preview-dialogue-close" class="preview-dialogue-close" type="button">Back to the street <span aria-hidden="true">→</span></button>
+            <p class="preview-dialogue-hint">Esc to return · Tab to choose a reply</p>
           </div>
         </section>
         <section id="preview-error" class="preview-overlay" role="alertdialog" aria-labelledby="preview-error-title" aria-describedby="preview-error-message" hidden>
