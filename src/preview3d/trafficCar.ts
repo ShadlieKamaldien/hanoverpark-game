@@ -12,6 +12,7 @@ import type { MapPoint } from "../game/world/mapData";
 import { toWorld } from "./map";
 
 export type TrafficAppearance = { kind: "hatchback" | "sedan" | "minibus"; color: string };
+export type TrafficCarOptions = { driver?: boolean; steerable?: boolean };
 type Lighting = "day" | "sunset" | "night";
 type Materials = { body: StandardMaterial; glass: StandardMaterial; lamps: StandardMaterial; users: number };
 const sceneMaterials = new WeakMap<Scene, Materials>();
@@ -46,10 +47,11 @@ export class TrafficCar {
   readonly dimensions: { width: number; length: number };
   private readonly shared: Materials;
   private readonly axles: Mesh[] = [];
+  private readonly steeringPivots: TransformNode[] = [];
   private readonly wheelRadius: number;
   private disposed = false;
 
-  constructor(private readonly scene: Scene, id: string, appearance: TrafficAppearance) {
+  constructor(private readonly scene: Scene, id: string, appearance: TrafficAppearance, options: TrafficCarOptions = {}) {
     const taxi = appearance.kind === "minibus";
     const hatch = appearance.kind === "hatchback";
     const width = taxi ? 1.77 : hatch ? 1.52 : 1.63;
@@ -179,14 +181,16 @@ export class TrafficCar {
     const driverX = width * 0.22;
     const driverZ = taxi ? 1.05 : 0.22;
     const driverHeight = taxi ? 0.37 : 0.21;
-    box(bodyParts, "driver-shirt", 0.28, driverHeight, 0.17, driverX,
-      beltY + driverHeight / 2 + 0.015, driverZ, new Color3(0.25, 0.33, 0.34));
-    const head = MeshBuilder.CreateSphere(`traffic-${id}-driver-head`, { diameter: 0.18, segments: 6 }, scene);
-    head.position.set(driverX, beltY + driverHeight + 0.11, driverZ + 0.01);
-    this.color(head, new Color3(0.50, 0.31, 0.21), this.shared.body);
-    bodyParts.push(head);
-    box(bodyParts, "driver-hair", 0.16, 0.04, 0.15, driverX,
-      beltY + driverHeight + 0.18, driverZ, trim);
+    if (options.driver !== false) {
+      box(bodyParts, "driver-shirt", 0.28, driverHeight, 0.17, driverX,
+        beltY + driverHeight / 2 + 0.015, driverZ, new Color3(0.25, 0.33, 0.34));
+      const head = MeshBuilder.CreateSphere(`traffic-${id}-driver-head`, { diameter: 0.18, segments: 6 }, scene);
+      head.position.set(driverX, beltY + driverHeight + 0.11, driverZ + 0.01);
+      this.color(head, new Color3(0.50, 0.31, 0.21), this.shared.body);
+      bodyParts.push(head);
+      box(bodyParts, "driver-hair", 0.16, 0.04, 0.15, driverX,
+        beltY + driverHeight + 0.18, driverZ, trim);
+    }
     box(bodyParts, "steering-wheel", 0.20, 0.045, 0.17, driverX,
       beltY + 0.07, cabinFront - 0.27, trim);
     for (const side of [-1, 1]) {
@@ -214,7 +218,9 @@ export class TrafficCar {
     const wheelBase = taxi ? 3.37 : hatch ? 2.35 : 2.77;
     const wheelOffset = taxi ? -0.06 : hatch ? 0.05 : 0.015;
     const wheelParts: Mesh[] = [];
+    const sideParts: Mesh[][] = [];
     for (const side of [-1, 1]) {
+      const start = wheelParts.length;
       const wheel = MeshBuilder.CreateCylinder(`traffic-${id}-tyre-${side}`, {
         diameter: this.wheelRadius * 2, height: 0.19, tessellation: 12,
       }, scene);
@@ -234,23 +240,53 @@ export class TrafficCar {
           this.wheelRadius * 0.88, 0.023, side * (width / 2 + 0.036), 0, 0, trim);
         spoke.rotation.x = angle;
       }
+      sideParts.push(wheelParts.slice(start));
     }
-    const frontAxle = this.merge(wheelParts, `traffic-${id}-front-axle`, this.shared.body);
-    frontAxle.position.set(0, wheelY, wheelOffset + wheelBase / 2);
-    const rearAxle = frontAxle.clone(`traffic-${id}-rear-axle`, this.root, false);
-    rearAxle.position.z = wheelOffset - wheelBase / 2;
-    rearAxle.isPickable = false;
-    this.axles.push(frontAxle, rearAxle);
+    if (options.steerable) {
+      const rearParts = wheelParts.map((part, i) => {
+        const clone = part.clone(`traffic-${id}-rear-part-${i}`, null, false);
+        // MergeMeshes can extend its first index array in place. These rear
+        // parts must not share it with the independent front-wheel geometry.
+        clone.makeGeometryUnique();
+        return clone;
+      });
+      const rearAxle = this.merge(rearParts, `traffic-${id}-rear-axle`, this.shared.body);
+      rearAxle.position.set(0, wheelY, wheelOffset - wheelBase / 2);
+      for (let i = 0; i < sideParts.length; i++) {
+        const side = i === 0 ? -1 : 1, x = side * (width / 2 - 0.08);
+        const pivot = new TransformNode(`traffic-${id}-steering-${side}`, scene);
+        pivot.parent = this.root;
+        pivot.position.set(x, wheelY, wheelOffset + wheelBase / 2);
+        const wheel = this.merge(sideParts[i], `traffic-${id}-front-wheel-${side}`, this.shared.body);
+        // Re-centre the merged geometry at the tyre axle before rotating it.
+        const positions = wheel.getVerticesData(VertexBuffer.PositionKind)!;
+        for (let vertex = 0; vertex < positions.length; vertex += 3) positions[vertex] -= x;
+        wheel.setVerticesData(VertexBuffer.PositionKind, positions);
+        wheel.refreshBoundingInfo();
+        wheel.parent = pivot;
+        this.axles.push(wheel);
+        this.steeringPivots.push(pivot);
+      }
+      this.axles.push(rearAxle);
+    } else {
+      const frontAxle = this.merge(wheelParts, `traffic-${id}-front-axle`, this.shared.body);
+      frontAxle.position.set(0, wheelY, wheelOffset + wheelBase / 2);
+      const rearAxle = frontAxle.clone(`traffic-${id}-rear-axle`, this.root, false);
+      rearAxle.position.z = wheelOffset - wheelBase / 2;
+      rearAxle.isPickable = false;
+      this.axles.push(frontAxle, rearAxle);
+    }
     this.setLighting("day");
   }
 
-  sync(position: MapPoint, heading: number, metresTravelled: number, frozen = false) {
+  sync(position: MapPoint, heading: number, metresTravelled: number, frozen = false, steering = 0) {
     if (this.disposed) return;
     this.root.position.copyFrom(toWorld(position));
     this.root.rotation.y = heading;
     if (!frozen) {
       const rotation = (metresTravelled / this.wheelRadius) % (Math.PI * 2);
       for (const axle of this.axles) axle.rotation.x = rotation;
+      for (const pivot of this.steeringPivots) pivot.rotation.y = steering;
     }
   }
 

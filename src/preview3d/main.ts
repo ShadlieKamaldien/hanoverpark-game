@@ -23,6 +23,8 @@ import { buildProperties } from "./propertiesWorld";
 import { buildMappedWallArt } from "./wallArt";
 import { Traffic } from "./traffic";
 import { CREWS } from "./crews";
+import { DriveableCar } from "./driveableCar";
+import { DrivingCamera } from "./drivingCamera";
 
 const ui = new PreviewInterface();
 
@@ -42,8 +44,10 @@ function startPreview() {
   const player = new PreviewPlayer(scene);
   const npcs = new NeighbourhoodNpcs(scene);
   const traffic = new Traffic(scene);
-  const target = () => player.mesh.position.add(new Vector3(0, 1.1, 0));
+  const car = new DriveableCar(scene);
+  const target = () => (car.occupied ? car.actor.root.position : player.mesh.position).add(new Vector3(0, 1.1, 0));
   const views = { street: { beta: 1.18, radius: 18 }, overview: { beta: 0.72, radius: 48 } };
+  const drivingViews = { street: { beta: 1.12, radius: 12 }, overview: views.overview };
   let viewPreset: ViewPreset = "street";
   const camera = new ArcRotateCamera("following-camera", -Math.PI / 2, views.street.beta, views.street.radius, target(), scene);
   camera.lowerRadiusLimit = 8;
@@ -55,9 +59,10 @@ function startPreview() {
   camera.wheelPrecision = 12;
   camera.panningSensibility = 0;
   camera.inputs.removeByType("ArcRotateCameraKeyboardMoveInput");
+  const drivingCamera = new DrivingCamera(camera, scene);
   const ambient = new HemisphericLight("sky-fill", Vector3.Up(), scene);
   const characterFill = new HemisphericLight("character-sky-fill", Vector3.Up(), scene);
-  characterFill.includedOnlyMeshes = [...player.shadowCasters, ...npcs.shadowCasters, ...traffic.shadowCasters];
+  characterFill.includedOnlyMeshes = [...player.shadowCasters, ...npcs.shadowCasters, ...traffic.shadowCasters, ...car.shadowCasters];
   characterFill.renderPriority = 1;
   characterFill.diffuse = new Color3(0.82, 0.9, 1);
   characterFill.groundColor = new Color3(0.26, 0.31, 0.35);
@@ -71,7 +76,7 @@ function startPreview() {
   shadows.filteringQuality = ShadowGenerator.QUALITY_LOW;
   shadows.bias = 0.003;
   shadows.normalBias = 0.02;
-  for (const mesh of [...world.shadowCasters, ...properties.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters, ...traffic.shadowCasters]) shadows.addShadowCaster(mesh);
+  for (const mesh of [...world.shadowCasters, ...properties.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters, ...traffic.shadowCasters, ...car.shadowCasters]) shadows.addShadowCaster(mesh);
   // The merged body gives each neighbour a silhouette without five shadow draws.
   for (const entity of npcs.actors) shadows.addShadowCaster(entity.actor.shadowCasters[0]);
   // An explicit shadow render list otherwise submits off-screen buildings too.
@@ -114,6 +119,7 @@ function startPreview() {
     }
     sky.setLighting(preset);
     traffic.setLighting(preset);
+    car.setLighting(preset);
     ui.setLighting(preset);
   };
   lightScene("sunset");
@@ -148,6 +154,9 @@ function startPreview() {
       const vx = ox + (vehicle.position.x - bounds.minX) * scale, vy = oy + (vehicle.position.y - bounds.minY) * scale;
       context.fillRect(vx - 1.3, vy - 1.3, 2.6, 2.6);
     }
+    context.fillStyle = "#edbd59";
+    const cx = ox + (car.position.x - bounds.minX) * scale, cy = oy + (car.position.y - bounds.minY) * scale;
+    context.fillRect(cx - 2, cy - 2, 4, 4);
     context.fillStyle = "#89c7bc";
     for (const entity of npcs.actors) {
       const nx = ox + (entity.position.x - bounds.minX) * scale, ny = oy + (entity.position.y - bounds.minY) * scale;
@@ -160,12 +169,21 @@ function startPreview() {
     const crew = CREWS.find((entry) => entry.id === crewState.affiliation);
     player.setCrewColour(crew?.colour ?? null);
     ui.crewStatus(crewState, crew?.name);
+    ui.vehicleStatus({ driving: car.occupied, speed: car.speed,
+      gear: Math.abs(car.speed) < 0.05 ? "park" : car.speed < 0 ? "reverse" : "forward",
+      message: car.exitMessage });
   };
 
   const keys = new Set<string>();
-  const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight"]);
+  const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight", "Space"]);
   let started = false, paused = false, disposed = false, failed = false;
   let hudElapsed = 0;
+  let orbitHeld = false, orbitGrace = 0;
+  const stopCameraDrift = () => {
+    camera.inertialAlphaOffset = 0;
+    camera.inertialBetaOffset = 0;
+    camera.inertialRadiusOffset = 0;
+  };
   const closeConversation = () => {
     keys.clear();
     npcs.close();
@@ -173,7 +191,7 @@ function startPreview() {
     if (started && !paused && !failed) camera.attachControl(ui.canvas, true);
   };
   const openConversation = () => {
-    if (!started || paused || failed || ui.dialogueOpen) return;
+    if (!started || paused || failed || ui.dialogueOpen || car.occupied) return;
     const conversation = npcs.interact(player.position);
     if (!conversation) return;
     keys.clear();
@@ -184,7 +202,25 @@ function startPreview() {
     ui.prompt(null);
     ui.dialogue(conversation);
   };
-  ui.onInteract = openConversation;
+  const interactionPrompt = () => {
+    if (!started || paused || failed || ui.dialogueOpen) return null;
+    if (car.occupied) return "E · Exit hatchback";
+    if (car.canEnter(player.position)) return "E · Drive hatchback";
+    const neighbour = npcs.nearest(player.position);
+    return neighbour ? `E · Speak to ${neighbour.name}` : null;
+  };
+  const interact = () => {
+    if (!started || paused || failed || ui.dialogueOpen) return;
+    if (car.occupied) {
+      const exit = car.exit(traffic.solids, npcs.actors.map((entity) => entity.position));
+      if (exit) { keys.clear(); player.leaveVehicle(exit); recenter(); }
+    } else if (car.canEnter(player.position) && car.enter(player.position)) {
+      keys.clear(); player.ride(car.position, car.heading); recenter();
+    } else openConversation();
+    updateLocation();
+    ui.prompt(interactionPrompt());
+  };
+  ui.onInteract = interact;
   ui.onDialogueChoice = (id) => {
     keys.clear();
     const conversation = npcs.choose(id);
@@ -196,6 +232,8 @@ function startPreview() {
     if (!started || failed) return;
     paused = value;
     keys.clear();
+    stopCameraDrift();
+    orbitHeld = false;
     if (value) { closeConversation(); ui.prompt(null); }
     if (value) camera.detachControl(); else camera.attachControl(ui.canvas, true);
     ui.pause(value);
@@ -204,12 +242,14 @@ function startPreview() {
   ui.onPause = () => setPaused(true);
   ui.onResume = () => setPaused(false);
   const recenter = () => {
-    camera.inertialAlphaOffset = 0;
-    camera.inertialBetaOffset = 0;
-    camera.inertialRadiusOffset = 0;
-    camera.alpha = -Math.PI / 2;
-    camera.beta = views[viewPreset].beta;
-    camera.radius = views[viewPreset].radius;
+    stopCameraDrift();
+    orbitGrace = 0;
+    camera.alpha = -Math.PI / 2 - (car.occupied ? car.heading : 0);
+    const view = (car.occupied ? drivingViews : views)[viewPreset];
+    camera.lowerRadiusLimit = car.occupied ? 2 : 8;
+    camera.beta = view.beta;
+    camera.radius = view.radius;
+    drivingCamera.reset(view.radius);
     camera.setTarget(target(), false, false, true);
   };
   ui.onRecenter = recenter;
@@ -223,17 +263,22 @@ function startPreview() {
       if (ui.dialogueOpen) closeConversation(); else setPaused(!paused);
       return;
     }
-    if (event.code === "KeyE" && !event.repeat) { event.preventDefault(); openConversation(); return; }
+    if (event.code === "KeyE" && !event.repeat) { event.preventDefault(); interact(); return; }
     if (!paused && !ui.dialogueOpen && movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
   };
   const keyup = (event: KeyboardEvent) => { keys.delete(event.code); };
   const blur = () => { keys.clear(); setPaused(true); };
   const visibility = () => { if (document.hidden) blur(); };
   const resize = () => engine.resize();
+  const orbitStart = () => { if (started && !paused && !ui.dialogueOpen) { orbitHeld = true; orbitGrace = 2; } };
+  const orbitEnd = () => { if (orbitHeld) { orbitHeld = false; orbitGrace = 2; } };
   window.addEventListener("keydown", keydown);
   window.addEventListener("keyup", keyup);
   window.addEventListener("blur", blur);
   window.addEventListener("resize", resize);
+  ui.canvas.addEventListener("pointerdown", orbitStart);
+  window.addEventListener("pointerup", orbitEnd);
+  window.addEventListener("pointercancel", orbitEnd);
   document.addEventListener("visibilitychange", visibility);
   const fail = (error?: unknown) => {
     if (import.meta.env.DEV && error) console.error(error);
@@ -253,14 +298,29 @@ function startPreview() {
     if (disposed || failed) return;
     try {
       const dt = Math.min(engine.getDeltaTime() / 1000, 0.1);
-      traffic.update(dt, player.position, npcs.actors.map((entity) => entity.position), !started || paused || ui.dialogueOpen);
-      player.setTrafficSolids(traffic.solids);
-      npcs.setTrafficSolids(traffic.solids);
+      const frozen = !started || paused || ui.dialogueOpen;
+      const pedestrians = npcs.actors.map((entity) => entity.position);
+      traffic.update(dt, player.position, pedestrians, frozen, [car.solid]);
+      car.update(dt, keys, traffic.solids, pedestrians, frozen);
+      const movingSolids = [...traffic.solids, car.solid];
+      player.setTrafficSolids(movingSolids);
+      npcs.setTrafficSolids(movingSolids);
       if (started && !paused) {
-        if (!ui.dialogueOpen) player.update(dt, keys, camera.getForwardRay().direction);
+        if (!ui.dialogueOpen) {
+          if (car.occupied) {
+            player.ride(car.position, car.heading);
+            orbitGrace = Math.max(0, orbitGrace - dt);
+            if (!orbitHeld && orbitGrace === 0) {
+              const desired = -Math.PI / 2 - car.heading;
+              const turn = Math.atan2(Math.sin(desired - camera.alpha), Math.cos(desired - camera.alpha));
+              camera.alpha += turn * (1 - Math.exp(-dt * 6));
+            }
+          } else player.update(dt, keys, camera.getForwardRay().direction);
+        }
         camera.setTarget(Vector3.Lerp(camera.target, target(), Math.min(1, dt * 12)), false, false, true);
       }
-      npcs.update(dt, player.position, !started || paused);
+      drivingCamera.update(dt, !frozen && car.occupied);
+      npcs.update(dt, player.position, !started || paused, car.occupied);
       sun.position.copyFrom(target().subtract(sun.direction.scale(100)));
       Frustum.GetPlanesToRef(shadows.getTransformMatrix(), shadowFrustum);
       sky.update(camera.position, sun.direction);
@@ -269,15 +329,14 @@ function startPreview() {
       hudElapsed += dt;
       if (hudElapsed >= 0.12) {
         updateLocation();
-        const neighbour = started && !paused && !ui.dialogueOpen ? npcs.nearest(player.position) : null;
-        ui.prompt(neighbour ? `E · Speak to ${neighbour.name}` : null);
+        ui.prompt(interactionPrompt());
         hudElapsed = 0;
       }
       scene.render();
     } catch (error) { fail(error); }
   });
   if (import.meta.env.DEV) {
-    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, traffic, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
+    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, traffic, car, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
   }
   const pagehide = (event: PageTransitionEvent) => {
     if (event.persisted) blur();
@@ -291,9 +350,12 @@ function startPreview() {
     window.removeEventListener("keyup", keyup);
     window.removeEventListener("blur", blur);
     window.removeEventListener("resize", resize);
+    ui.canvas.removeEventListener("pointerdown", orbitStart);
+    window.removeEventListener("pointerup", orbitEnd);
+    window.removeEventListener("pointercancel", orbitEnd);
     document.removeEventListener("visibilitychange", visibility);
     window.removeEventListener("pagehide", pagehide);
-    traffic.dispose(); npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
+    drivingCamera.dispose(); car.dispose(); traffic.dispose(); npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
   };
   window.addEventListener("pagehide", pagehide);
   if (import.meta.hot) import.meta.hot.dispose(dispose);

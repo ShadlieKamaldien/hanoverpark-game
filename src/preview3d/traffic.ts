@@ -6,6 +6,7 @@ import { BUILDINGS, FIELDS, PREVIEW, SPAWN } from "./map";
 import { PROPERTY_SOLIDS } from "./properties";
 import { TrafficCar, type TrafficAppearance } from "./trafficCar";
 import { createTrafficRoutes, routePose, type TrafficJunction, type TrafficRoute } from "./trafficRoutes";
+import { polygonsOverlap } from "./vehicleGeometry";
 
 export interface TrafficVehicle {
   id: string;
@@ -114,7 +115,7 @@ export class Traffic {
       streets: [...new Set(this.routes.flatMap((route) => route.roads))], lane: "left" };
   }
 
-  update(dt: number, player: MapPoint, pedestrians: MapPoint[], frozen: boolean) {
+  update(dt: number, player: MapPoint, pedestrians: MapPoint[], frozen: boolean, obstacles: Polygon[] = []) {
     if (this.disposed || frozen) return;
     const elapsed = Math.min(0.1, Math.max(0, dt));
     if (!elapsed) return;
@@ -136,7 +137,7 @@ export class Traffic {
             target = Math.min(target, Math.sqrt(2 * BRAKING * Math.max(0, clearance)));
           }
         }
-        const clear = this.clearDistance(vehicle, people);
+        const clear = this.clearDistance(vehicle, people, obstacles);
         target = Math.min(target, Math.sqrt(2 * BRAKING * Math.max(0, clear - 1.1)));
         const acceleration = target > vehicle.speed ? 2.1 : BRAKING;
         const speed = vehicle.speed + Math.sign(target - vehicle.speed) * Math.min(Math.abs(target - vehicle.speed), acceleration * step);
@@ -146,7 +147,8 @@ export class Traffic {
         // This final conservative check uses short real-time substeps. Traffic
         // cannot push a pedestrian or pass through a stopped leading vehicle.
         if (this.staticBlocked(proposed) || people.some((p) => distance(pose.position, p) < 5 && touchesPedestrian(proposed, p, 0.5)) ||
-          this.vehicles.some((other) => other !== vehicle && distance(other.position, pose.position) < 8 && overlaps(proposed, this.rectangle(other), 0.3))) {
+          this.vehicles.some((other) => other !== vehicle && distance(other.position, pose.position) < 8 && overlaps(proposed, this.rectangle(other), 0.3)) ||
+          obstacles.some((solid) => polygonsOverlap(footprint(proposed, 0.2), solid))) {
           vehicle.speed = 0;
           continue;
         }
@@ -246,15 +248,22 @@ export class Traffic {
     }
   }
 
-  private clearDistance(vehicle: TrafficVehicle, people: MapPoint[]) {
+  private clearDistance(vehicle: TrafficVehicle, people: MapPoint[], obstacles: Polygon[]) {
     const look = Math.max(12, vehicle.speed ** 2 / (2 * BRAKING) + 7);
     const nearbyPeople = people.filter((p) => distance(p, vehicle.position) < look + vehicle.actor.dimensions.length);
     const nearbyCars = this.vehicles.filter((other) => other !== vehicle && distance(other.position, vehicle.position) < look + 7);
-    if (!nearbyPeople.length && !nearbyCars.length) return look;
+    const reach = (look + vehicle.actor.dimensions.length) * ppm;
+    const nearbyObstacles = obstacles.filter((solid) =>
+      Math.min(...solid.points.map((p) => p.x)) <= vehicle.position.x + reach &&
+      Math.max(...solid.points.map((p) => p.x)) >= vehicle.position.x - reach &&
+      Math.min(...solid.points.map((p) => p.y)) <= vehicle.position.y + reach &&
+      Math.max(...solid.points.map((p) => p.y)) >= vehicle.position.y - reach);
+    if (!nearbyPeople.length && !nearbyCars.length && !nearbyObstacles.length) return look;
     for (let ahead = 0; ahead <= look; ahead += 0.7) {
       const pose = routePose(vehicle.route, vehicle.distanceAlongRoute + ahead * ppm);
       const rectangle = { ...pose, ...vehicle.actor.dimensions };
-      if (nearbyPeople.some((p) => touchesPedestrian(rectangle, p, 0.55)) || nearbyCars.some((other) => overlaps(rectangle, this.rectangle(other), 0.75))) return Math.max(0, ahead - 0.7);
+      if (nearbyPeople.some((p) => touchesPedestrian(rectangle, p, 0.55)) || nearbyCars.some((other) => overlaps(rectangle, this.rectangle(other), 0.75)) ||
+        nearbyObstacles.some((solid) => polygonsOverlap(footprint(rectangle, 0.38), solid))) return Math.max(0, ahead - 0.7);
     }
     return look;
   }

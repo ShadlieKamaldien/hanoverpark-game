@@ -13,6 +13,13 @@ export interface CrewStatus {
   remaining?: number;
   chasingIds: string[];
 }
+export interface VehicleStatus {
+  driving: boolean;
+  /** Signed metres per second; the display converts this to kilometres per hour. */
+  speed: number;
+  gear: "forward" | "reverse" | "park";
+  message?: string;
+}
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -48,6 +55,11 @@ export class PreviewInterface {
   private readonly crewTimer = element<HTMLElement>("preview-crew-timer");
   private readonly crewHint = element<HTMLElement>("preview-crew-hint");
   private readonly crewAnnouncement = element<HTMLElement>("preview-crew-announcement");
+  private readonly vehiclePanel = element<HTMLElement>("preview-vehicle-status");
+  private readonly vehicleSpeed = element<HTMLElement>("preview-vehicle-speed");
+  private readonly vehicleGear = element<HTMLElement>("preview-vehicle-gear");
+  private readonly vehicleMessage = element<HTMLElement>("preview-vehicle-message");
+  private readonly controls = element<HTMLElement>("preview-controls");
   private readonly resumeButton = element<HTMLButtonElement>("preview-resume-button");
   private readonly interactPrompt = element<HTMLElement>("preview-interact-prompt");
   private readonly interactButton = element<HTMLButtonElement>("preview-interact");
@@ -63,6 +75,8 @@ export class PreviewInterface {
   private started = false;
   private paused = false;
   private crewAnnouncementKey = "";
+  private driving = false;
+  private crewPhase = "normal";
 
   constructor() {
     this.canvas.inert = true;
@@ -160,7 +174,8 @@ export class PreviewInterface {
     this.crewPanel.dataset.affiliation = state.affiliation ?? "neutral";
     if (this.crewAffiliation.textContent !== affiliation) this.crewAffiliation.textContent = affiliation;
     if (this.crewMessage.textContent !== state.text) this.crewMessage.textContent = state.text;
-    this.crewHint.hidden = state.phase !== "warning" && state.phase !== "pursuit";
+    this.crewPhase = state.phase;
+    this.updateCrewHint();
     const hasTimer = Number.isFinite(state.remaining) && (state.remaining ?? 0) > 0 && phase !== "normal";
     this.crewTimer.hidden = !hasTimer;
     const timer = hasTimer ? `${Math.ceil(state.remaining!)}s` : "";
@@ -172,6 +187,44 @@ export class PreviewInterface {
       this.crewAnnouncementKey = key;
       this.crewAnnouncement.textContent = `${affiliation}. ${state.text}`;
     }
+  }
+
+  vehicleStatus(state: VehicleStatus): void {
+    this.vehiclePanel.hidden = !state.driving;
+    if (this.driving !== state.driving) {
+      this.driving = state.driving;
+      this.hud.dataset.driving = String(state.driving);
+      const controls: [string, string][] = state.driving
+        ? [["W / S", "Accelerate / brake + reverse"], ["A / D", "Steer"], ["SPACE", "Brake"],
+          ["E", "Exit"], ["DRAG", "Orbit"], ["WHEEL", "Zoom"], ["ESC", "Pause"]]
+        : [["WASD / ARROWS", "Walk"], ["SHIFT", "Sprint"], ["E", "Greet / enter car"],
+          ["DRAG", "Orbit"], ["WHEEL", "Zoom"], ["ESC", "Pause"]];
+      this.controls.replaceChildren(...controls.map(([key, action]) => {
+        const label = document.createElement("span");
+        const shortcut = document.createElement("b");
+        shortcut.textContent = key;
+        label.append(shortcut, document.createTextNode(` ${action}`));
+        return label;
+      }));
+      this.updateCrewHint();
+    }
+    const speed = Number.isFinite(state.speed) ? Math.round(Math.abs(state.speed) * 3.6) : 0;
+    if (this.vehicleSpeed.textContent !== String(speed)) this.vehicleSpeed.textContent = String(speed);
+    const gear = state.gear === "forward" ? "FWD" : state.gear === "reverse" ? "REV" : "PARK";
+    if (this.vehicleGear.textContent !== gear) this.vehicleGear.textContent = gear;
+    this.vehiclePanel.dataset.gear = state.gear;
+    const message = state.message?.trim() || "Stop before stepping out.";
+    if (this.vehicleMessage.textContent !== message) this.vehicleMessage.textContent = message;
+  }
+
+  private updateCrewHint(): void {
+    this.crewHint.hidden = this.crewPhase !== "warning" && this.crewPhase !== "pursuit";
+    const key = this.driving ? "W / S · A / D" : "SHIFT";
+    const action = this.driving ? " Drive away" : " Sprint away";
+    if (this.crewHint.textContent === `${key}${action}`) return;
+    const shortcut = document.createElement("b");
+    shortcut.textContent = key;
+    this.crewHint.replaceChildren(shortcut, document.createTextNode(action));
   }
 
   setLighting(preset: LightingPreset): void {

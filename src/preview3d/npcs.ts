@@ -235,6 +235,7 @@ export class NeighbourhoodNpcs {
   private phaseTime = 0;
   private lostSightTime = 0;
   private cooldown = 0;
+  private inVehicle = false;
   private active: NpcEntity | null = null;
   private conversation: Conversation | null = null;
   private dialogueNode = "start";
@@ -295,7 +296,7 @@ export class NeighbourhoodNpcs {
       neutral: "No crew · Speak to a crew contact to choose a side.",
       joined: `Running with ${joined?.name ?? "your crew"}. Rival crews react to your colours.`,
       warning: `${rival?.name}: Move along before this gets worse.`,
-      pursuit: `${rival?.name} are coming after you. Sprint away or speak to a contact to leave your crew.`,
+      pursuit: `${rival?.name} are coming after you. ${this.inVehicle ? "Drive away, or stop and step out to speak to a contact." : "Sprint away or speak to a contact to leave your crew."}`,
       escaped: `You got away. Keep some distance from ${rival?.name}.`,
       caught: "They caught up. Move on, or speak to leave your crew.",
     };
@@ -313,12 +314,13 @@ export class NeighbourhoodNpcs {
     this.phaseTime = 0; this.lostSightTime = 0; this.cooldown = 15;
   }
 
-  update(dt: number, player: MapPoint, frozen: boolean) {
+  update(dt: number, player: MapPoint, frozen: boolean, inVehicle = false) {
     if (this.disposed) return;
     if (frozen) return;
+    this.inVehicle = inVehicle;
     const elapsed = Math.min(0.1, Math.max(0, dt));
     // A conversation pauses everyone, including warning, chase and cooldown timers.
-    if (!this.active) this.updateCrewState(elapsed, player);
+    if (!this.active) this.updateCrewState(elapsed, player, inVehicle);
     for (const entity of this.actors) {
       let moving = false;
       if (this.active) {
@@ -451,7 +453,7 @@ export class NeighbourhoodNpcs {
     return this.showCrew();
   }
 
-  private updateCrewState(dt: number, player: MapPoint) {
+  private updateCrewState(dt: number, player: MapPoint, inVehicle: boolean) {
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (!this.affiliation) { this.phase = "neutral"; return; }
     if (this.phase === "caught" || this.phase === "escaped") {
@@ -480,7 +482,7 @@ export class NeighbourhoodNpcs {
       return;
     }
     if (this.phase === "pursuit") {
-      if (rivals.some((entity) => distance(entity) <= 1.2 * PIXELS_PER_METRE && this.clearLine(player, entity.position))) {
+      if (!inVehicle && rivals.some((entity) => distance(entity) <= 1.2 * PIXELS_PER_METRE && this.clearLine(player, entity.position))) {
         this.finishPursuit("caught"); return;
       }
       const nearest = Math.min(...rivals.map(distance));

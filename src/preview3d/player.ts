@@ -6,6 +6,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Collision, type Polygon } from "../game/systems/collision";
 import { BUILDINGS, PREVIEW, SPAWN, toWorld } from "./map";
+import type { MapPoint } from "../game/world/mapData";
 import { PROPERTY_SOLIDS } from "./properties";
 
 const BODY_RADIUS = 3.2;
@@ -32,6 +33,32 @@ export class PreviewPlayer {
   private trafficCollision = new Collision([]);
   private readonly shirt: StandardMaterial;
   private shirtColour = "#dda93c";
+  private vehicleOccupied = false;
+
+  get inVehicle() { return this.vehicleOccupied; }
+
+  /** Keep map position at the car centre while rendering the right-hand driver. */
+  ride(position: MapPoint, heading: number) {
+    this.vehicleOccupied = true;
+    Object.assign(this.position, position);
+    const c = Math.cos(heading), s = Math.sin(heading);
+    this.mesh.position.copyFrom(toWorld(position));
+    this.mesh.position.x += c * 0.4 + s * 0.08;
+    this.mesh.position.z += -s * 0.4 + c * 0.08;
+    this.mesh.position.y = -0.32;
+    this.mesh.rotation.set(0, heading, 0);
+    for (let i = 0; i < this.limbs.length; i++) {
+      this.limbs[i].rotation.set(i % 2 === 0 ? -0.8 : -1.35, 0, 0);
+    }
+  }
+
+  leaveVehicle(position: MapPoint) {
+    this.vehicleOccupied = false;
+    Object.assign(this.position, position);
+    this.mesh.position.copyFrom(toWorld(position));
+    this.gait = 0;
+    for (const limb of this.limbs) limb.rotation.set(0, 0, 0);
+  }
 
   setTrafficSolids(polygons: Polygon[]) {
     this.trafficCollision = new Collision([], polygons);
@@ -99,6 +126,7 @@ export class PreviewPlayer {
     keys: Set<string>,
     forward: { x: number; z: number } = { x: 0, z: 1 },
   ) {
+    if (this.vehicleOccupied) return;
     const elapsed = Math.min(Math.max(dt, 0), 0.1);
     let dx = Number(keys.has("KeyD") || keys.has("ArrowRight")) -
       Number(keys.has("KeyA") || keys.has("ArrowLeft"));
@@ -161,6 +189,7 @@ export class PreviewPlayer {
   }
 
   reset() {
+    this.vehicleOccupied = false;
     this.position.x = SPAWN.x;
     this.position.y = SPAWN.y;
     this.gait = 0;

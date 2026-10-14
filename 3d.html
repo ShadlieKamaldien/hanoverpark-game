@@ -30,6 +30,11 @@
             <p id="preview-crew-hint" class="preview-crew-hint" hidden><b>SHIFT</b> Sprint away</p>
             <span id="preview-crew-announcement" class="preview-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></span>
           </section>
+          <section id="preview-vehicle-status" class="preview-vehicle-status" aria-label="Driving status" hidden>
+            <div class="preview-vehicle-heading"><span class="preview-eyebrow">HATCHBACK</span><span id="preview-vehicle-gear">PARK</span></div>
+            <p class="preview-vehicle-speed"><b id="preview-vehicle-speed">0</b><span>km/h</span></p>
+            <p id="preview-vehicle-message">Stop before stepping out.</p>
+          </section>
           <div class="preview-actions">
             <fieldset class="preview-lighting preview-views">
               <legend>VIEW</legend>
@@ -48,7 +53,7 @@
           <div id="preview-interact-prompt" class="preview-interact-prompt" hidden>
             <button id="preview-interact" type="button" disabled>E · Greet a neighbour</button>
           </div>
-          <p id="preview-controls" class="preview-controls"><span><b>WASD / ARROWS</b> Walk</span><span><b>SHIFT</b> Sprint</span><span><b>E</b> Greet / speak</span><span><b>DRAG</b> Orbit</span><span><b>WHEEL</b> Zoom</span><span><b>ESC</b> Pause</span></p>
+          <p id="preview-controls" class="preview-controls"><span><b>WASD / ARROWS</b> Walk</span><span><b>SHIFT</b> Sprint</span><span><b>E</b> Greet / enter car</span><span><b>DRAG</b> Orbit</span><span><b>WHEEL</b> Zoom</span><span><b>ESC</b> Pause</span></p>
           <aside class="preview-map" aria-label="Neighbourhood minimap">
             <div class="preview-map-heading"><span>HANOVER PARK</span><span>N ↑</span></div>
             <canvas id="preview-minimap" width="220" height="180" aria-label="Minimap showing the mapped streets and your position"></canvas>
@@ -61,11 +66,11 @@
           <div class="preview-menu">
             <span class="preview-eyebrow">3D PREVIEW · DOWNBERG ROAD</span>
             <h1 id="preview-start-title">THE FLATS.<br /><span>ANOTHER ANGLE.</span></h1>
-            <p class="preview-intro">Take a walk through the mapped streets. Explore the flats and courtyards around Downberg Road, greet the neighbours and keep an eye on the passing cars.</p>
+            <p class="preview-intro">Explore the flats and courtyards around Downberg Road, greet the neighbours or take the parked hatchback for a drive. Keep an eye on the passing cars.</p>
             <p id="preview-loading" class="preview-loading" role="status">Getting the neighbourhood ready…</p>
             <button id="preview-start-button" class="preview-primary" type="button" disabled>ENTER 3D PREVIEW <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
-            <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint · <b>E</b> Greet / speak<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom · <b>ESC</b> Pause</p>
+            <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint · <b>E</b> Greet / enter car<br />Driving: <b>W / S</b> Accelerate / brake + reverse · <b>A / D</b> Steer<br /><b>SPACE</b> Brake · <b>E</b> Exit when stopped · <b>ESC</b> Pause<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom</p>
             <p class="preview-keyboard-note">Keyboard and mouse needed for this preview.</p>
             <p class="preview-source-note">Real mapped streets. Original architecture, characters and fictional crews.<br />Watch traffic. Talk to crew contacts to join or stay neutral.</p>
           </div>
@@ -76,10 +81,10 @@
           <div class="preview-menu preview-compact-menu">
             <span class="preview-eyebrow">TAKE A MOMENT</span>
             <h1 id="preview-pause-title">PAUSED.</h1>
-            <p class="preview-intro">The street is waiting. Traffic and crew pursuits pause with you.</p>
+            <p class="preview-intro">The street is waiting. Your car, traffic and crew pursuits pause with you.</p>
             <button id="preview-resume-button" class="preview-primary" type="button">CONTINUE EXPLORING <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
-            <p class="preview-source-note">WASD / arrows to walk · Shift to sprint · E to greet / speak<br />Drag to orbit · Wheel to zoom · Esc to resume</p>
+            <p class="preview-source-note">On foot: WASD / arrows to walk · Shift to sprint · E to greet / enter car<br />Driving: W / S to accelerate / brake + reverse · A / D to steer<br />Space to brake · E to exit when stopped · Esc to resume<br />Drag to orbit · Wheel to zoom</p>
           </div>
         </section>
         <section id="preview-dialogue" class="preview-dialogue-overlay" role="dialog" aria-modal="true" aria-labelledby="preview-dialogue-speaker" aria-describedby="preview-dialogue-text" hidden>
