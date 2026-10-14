@@ -1,0 +1,399 @@
+:root {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #f3ecd8;
+  background: #142820;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+}
+button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}
+[hidden] {
+  display: none !important;
+}
+#app,
+#game,
+#ui {
+  position: absolute;
+  inset: 0;
+}
+#game {
+  top: 56px;
+}
+#game canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+#ui {
+  pointer-events: none;
+}
+.masthead {
+  height: 56px;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: #142820;
+  border-bottom: 1px solid #657361;
+  font-size: 10px;
+  letter-spacing: 2.6px;
+  font-weight: bold;
+}
+.brand {
+  font-size: 25px;
+  letter-spacing: -2px;
+}
+.brand-dot {
+  color: #edbd59;
+  font-size: 12px;
+  margin-left: 7px;
+}
+.edition {
+  margin-left: auto;
+  color: #a9b49d;
+  font-size: 9px;
+}
+.veil {
+  position: absolute;
+  inset: 56px 0 0;
+  background: linear-gradient(
+    90deg,
+    rgba(17, 39, 32, 0.98),
+    rgba(17, 39, 32, 0.82) 45%,
+    rgba(17, 39, 32, 0.18)
+  );
+  display: flex;
+  align-items: center;
+  padding: 5vw;
+  pointer-events: auto;
+}
+.menu-panel {
+  width: 520px;
+  max-width: 65vw;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #edbd59;
+  font-weight: bold;
+}
+h1 {
+  font-size: clamp(48px, 7.5vw, 102px);
+  letter-spacing: -5px;
+  line-height: 0.87;
+  margin: 32px 0;
+  color: #f4eed9;
+  font-weight: 900;
+}
+h1 > span {
+  color: #edbd59;
+}
+h1 small {
+  display: block;
+  font-size: 15px;
+  letter-spacing: 6px;
+  line-height: 2.4;
+  margin-top: 15px;
+}
+.intro {
+  line-height: 1.7;
+  font-size: 14px;
+  color: #c7d0bd;
+  margin-bottom: 26px;
+}
+button {
+  border: 0;
+  background: #edbd59;
+  color: #173c32;
+  padding: 17px 21px;
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  font-weight: 800;
+  min-width: 210px;
+  text-align: left;
+  margin: 5px 6px 5px 0;
+}
+button span {
+  float: right;
+}
+button:hover {
+  background: #ffe0a0;
+}
+.secondary {
+  background: transparent;
+  border: 1px solid #7c8a75;
+  color: #ede8cf;
+}
+.secondary:hover {
+  color: #183a2e;
+}
+.menu-footer {
+  font-size: 9px;
+  letter-spacing: 2px;
+  line-height: 2;
+  margin-top: 30px;
+  color: #9ba88f;
+}
+.menu-footer span {
+  letter-spacing: 0;
+  color: #bfc8b6;
+}
+.postcard {
+  margin-left: auto;
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  gap: 20px;
+  text-shadow: 1px 2px 4px #142820;
+}
+.postcard span,
+.postcard small {
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+.postcard b {
+  font-size: 33px;
+  line-height: 1.1;
+}
+.vitals {
+  position: absolute;
+  left: 25px;
+  top: 78px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: #16342de8;
+  border: 1px solid #74927c55;
+  min-width: 245px;
+}
+.avatar {
+  height: 41px;
+  width: 41px;
+  background: #e5b85a;
+  color: #193d32;
+  display: grid;
+  place-items: center;
+  font-size: 25px;
+  font-weight: bold;
+}
+.vitals b {
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+.meter {
+  width: 92px;
+  height: 5px;
+  margin-top: 6px;
+  background: #4a5c4e;
+}
+.meter span {
+  display: block;
+  height: 100%;
+  background: #da8466;
+}
+.stamina span {
+  background: #edc76a;
+}
+.vitals strong {
+  margin-left: auto;
+  color: #eac56b;
+  font-size: 24px;
+  font-weight: 500;
+}
+.objective {
+  position: absolute;
+  left: 25px;
+  top: 160px;
+  width: 260px;
+  border-left: 3px solid #edbd59;
+  padding: 12px 14px;
+  background: #16342de8;
+}
+.objective p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  color: #f1ecd8;
+}
+.map-card {
+  position: absolute;
+  right: 25px;
+  top: 78px;
+  background: #16342deb;
+  padding: 12px;
+  border: 1px solid #74927c55;
+}
+.map-heading {
+  font-size: 9px;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.map-heading span {
+  float: right;
+  color: #edbd59;
+}
+.map-card canvas {
+  display: block;
+  width: 220px;
+  height: 165px;
+  image-rendering: pixelated;
+}
+.map-caption {
+  font-size: 8px;
+  letter-spacing: 1px;
+  padding-top: 9px;
+  color: #d6e6ba;
+}
+.map-caption span {
+  float: right;
+  color: #edbd59;
+}
+.map-card.expanded {
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+}
+.map-card.expanded canvas {
+  width: min(70vw, 720px);
+  height: auto;
+}
+.controls {
+  position: absolute;
+  bottom: 17px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 9px;
+  letter-spacing: 1px;
+  background: #16342deb;
+  padding: 13px 18px;
+  color: #c9d2bb;
+}
+.controls i {
+  margin: 0 10px;
+  color: #a3b498;
+}
+kbd {
+  font-family: inherit;
+  font-weight: bold;
+  color: #f4d384;
+}
+#prompt {
+  position: absolute;
+  bottom: 77px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #16342def;
+  padding: 13px 22px;
+  font-size: 12px;
+  border-bottom: 2px solid #edbd59;
+  white-space: nowrap;
+}
+#prompt:empty {
+  display: none;
+}
+#modal {
+  background: #10271dd4;
+  justify-content: center;
+}
+.dialogue {
+  background: #1b3e32;
+  border: 1px solid #839276;
+  padding: 32px;
+  max-width: 530px;
+  box-shadow: 12px 12px 0 #10251c55;
+}
+.dialogue h2 {
+  font-size: 29px;
+  margin: 18px 0;
+  color: #f3d389;
+}
+.dialogue p {
+  font-size: 16px;
+  line-height: 1.7;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+#toast {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #edbd59;
+  color: #173c32;
+  padding: 16px 22px;
+  box-shadow: 0 5px 20px #10251c55;
+  font-size: 13px;
+  font-weight: bold;
+  max-width: 45vw;
+}
+@media (max-width: 700px) {
+  .edition,
+  .postcard {
+    display: none;
+  }
+  .masthead {
+    padding: 0 15px;
+  }
+  .menu-panel {
+    max-width: 90vw;
+  }
+  h1 {
+    letter-spacing: -3px;
+  }
+  .map-card {
+    right: 10px;
+    top: 70px;
+    padding: 8px;
+  }
+  .map-card canvas {
+    width: 130px;
+    height: 98px;
+  }
+  .vitals {
+    left: 10px;
+    top: 70px;
+    min-width: 210px;
+  }
+  .objective {
+    left: 10px;
+    top: 150px;
+    width: 210px;
+  }
+  .controls {
+    font-size: 8px;
+    letter-spacing: 0;
+    padding: 10px;
+  }
+  .controls i {
+    margin: 0 3px;
+  }
+  .dialogue {
+    max-width: 90vw;
+    padding: 20px;
+  }
+  #toast {
+    max-width: 85vw;
+    top: 250px;
+  }
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+}
