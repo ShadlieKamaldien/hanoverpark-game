@@ -66,7 +66,7 @@
           <div class="preview-menu">
             <span class="preview-eyebrow">3D PREVIEW · DOWNBERG ROAD</span>
             <h1 id="preview-start-title">THE FLATS.<br /><span>ANOTHER ANGLE.</span></h1>
-            <p class="preview-intro">Explore the flats and courtyards around Downberg Road, greet the neighbours or take the parked hatchback for a drive. Keep an eye on the passing cars.</p>
+            <p class="preview-intro">Explore the flats and courtyards around Downberg Road, greet the neighbours or take the parked hatchback for a drive. Everyone has something to get done; stop for a chat and hear their plans.</p>
             <p id="preview-loading" class="preview-loading" role="status">Getting the neighbourhood ready…</p>
             <button id="preview-start-button" class="preview-primary" type="button" disabled>ENTER 3D PREVIEW <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
@@ -89,12 +89,32 @@
         </section>
         <section id="preview-dialogue" class="preview-dialogue-overlay" role="dialog" aria-modal="true" aria-labelledby="preview-dialogue-speaker" aria-describedby="preview-dialogue-text" hidden>
           <div class="preview-dialogue-card">
-            <span class="preview-eyebrow">ON THE STREET</span>
-            <h2 id="preview-dialogue-speaker"></h2>
-            <p id="preview-dialogue-text"></p>
-            <div id="preview-dialogue-choices" class="preview-dialogue-choices" aria-label="Your reply"></div>
-            <button id="preview-dialogue-close" class="preview-dialogue-close" type="button">Back to the street <span aria-hidden="true">→</span></button>
-            <p class="preview-dialogue-hint">Esc to return · Tab to choose a reply</p>
+            <div class="preview-dialogue-body">
+              <span class="preview-eyebrow">ON THE STREET</span>
+              <h2 id="preview-dialogue-speaker"></h2>
+              <p id="preview-dialogue-text"></p>
+              <section id="preview-npc-goal" class="preview-npc-goal" aria-label="Their current plan" hidden>
+                <div class="preview-npc-goal-heading"><span class="preview-eyebrow">TODAY’S PLAN</span><span id="preview-npc-goal-stage"></span></div>
+                <h3 id="preview-npc-goal-label"></h3>
+                <progress id="preview-npc-goal-progress" max="1" value="0" aria-label="Progress on their current plan"></progress>
+                <p id="preview-npc-goal-say" hidden></p>
+              </section>
+              <div id="preview-dialogue-choices" class="preview-dialogue-choices" aria-label="Your reply"></div>
+              <form id="preview-chat-form" class="preview-chat" aria-busy="false">
+                <label for="preview-chat-input">Ask something</label>
+                <div class="preview-chat-entry">
+                  <input id="preview-chat-input" type="text" maxlength="280" autocomplete="off" placeholder="What are you up to today?" aria-describedby="preview-chat-hint" />
+                  <button id="preview-chat-send" type="submit" disabled>Send</button>
+                </div>
+                <p id="preview-chat-hint" class="preview-chat-hint">Enter to send · Up to 280 characters</p>
+                <p id="preview-chat-status" class="preview-chat-status" role="status" aria-live="polite" aria-atomic="true"></p>
+                <div class="preview-chat-answer" role="status" aria-live="polite" aria-atomic="true"><p id="preview-chat-reply" class="preview-chat-reply" hidden></p></div>
+              </form>
+            </div>
+            <div class="preview-dialogue-footer">
+              <button id="preview-dialogue-close" class="preview-dialogue-close" type="button">Back to the street <span aria-hidden="true">→</span></button>
+              <p class="preview-dialogue-hint">Esc to return · Tab to choose a reply or ask a question</p>
+            </div>
           </div>
         </section>
         <section id="preview-error" class="preview-overlay" role="alertdialog" aria-labelledby="preview-error-title" aria-describedby="preview-error-message" hidden>

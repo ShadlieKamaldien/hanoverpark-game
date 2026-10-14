@@ -6,6 +6,7 @@ import { BUILDINGS, FIELDS, PREVIEW, ROADS, SPAWN } from "./map";
 import { NpcActor, type Appearance } from "./npcActor";
 import { PROPERTY_SOLIDS } from "./properties";
 import { CREWS, CrewNavigation, type CrewPhase, type CrewState } from "./crews";
+import { NpcBrain, type BrainContext, type BrainDecision, type BrainState } from "./brains";
 
 export type NpcRole = "neighbour" | "vendor" | "pedestrian" | "requester" | "stranger" | "crew";
 export interface Conversation {
@@ -38,8 +39,8 @@ type Definition = {
   dialogue: Record<string, DialogueNode>;
 };
 type Placement = { position: MapPoint; heading: number; route: MapPoint[]; road: MapRoad };
-type Patrol = { route: MapPoint[]; index: number; speed: number; wait: number; phase: number };
 type CrewMovement = { home: MapPoint; path: MapPoint[]; replan: number; target: MapPoint | null };
+type GoalMovement = { path: MapPoint[]; replan: number; target: MapPoint | null; blockedFor: number; speed: number; wait: number };
 
 const BODY_RADIUS = 3.2;
 const PIXELS_PER_METRE = 1 / PREVIEW.metresPerPixel;
@@ -224,11 +225,15 @@ export class NeighbourhoodNpcs {
   private readonly collision = new Collision([], [...BUILDINGS.map((building) => ({ points: building.points, holes: building.holes })), ...PROPERTY_SOLIDS]);
   private readonly fieldCollision = new Collision([], FIELDS.map((field) => ({ points: field.points, holes: field.holes })));
   private readonly scripts = new Map<string, Definition>();
-  private readonly patrols = new Map<string, Patrol>();
+  private readonly brains = new Map<string, NpcBrain>();
+  private readonly goalMovement = new Map<string, GoalMovement>();
   private readonly crewMovement = new Map<string, CrewMovement>();
   private readonly navigation = new CrewNavigation((point) => this.clear(point, BODY_RADIUS + 0.3),
     (a, b) => this.clearLine(a, b, BODY_RADIUS + 0.3));
+  private readonly goalNavigation = new CrewNavigation((point) => this.clearGoal(point, BODY_RADIUS + 0.3),
+    (a, b) => this.clearGoalLine(a, b, BODY_RADIUS + 0.3));
   private trafficCollision: Collision | null = null;
+  private trafficCentres: MapPoint[] = [];
   private affiliation: string | null = null;
   private phase: CrewPhase = "neutral";
   private rivalCrew: string | null = null;
@@ -243,6 +248,7 @@ export class NeighbourhoodNpcs {
 
   constructor(scene: Scene) {
     const candidates = this.placements();
+    const selected = new Map<string, Placement>();
     definitions.forEach((definition, index) => {
       const placement = index === 0 ? this.welcomePlacement(candidates) : this.selectPlacement(candidates, definition.anchor, !!definition.patrol);
       const actor = new NpcActor(scene, definition.id, definition.appearance);
@@ -254,10 +260,7 @@ export class NeighbourhoodNpcs {
       this.actors.push(entity);
       this.shadowCasters.push(...actor.shadowCasters);
       this.scripts.set(entity.id, definition);
-      if (definition.patrol) this.patrols.set(entity.id, {
-        route: placement.route, index: 0, speed: (1.1 + index % 4 * 0.14) * PIXELS_PER_METRE,
-        wait: 0.6 + index * 0.08, phase: index,
-      });
+      selected.set(entity.id, placement);
       actor.root.setEnabled(Math.hypot(entity.position.x - SPAWN.x, entity.position.y - SPAWN.y) <= 110 * PIXELS_PER_METRE);
       actor.sync(entity.position, entity.heading, false, 0);
     });
@@ -281,14 +284,47 @@ export class NeighbourhoodNpcs {
         this.actors.push(entity); this.shadowCasters.push(...actor.shadowCasters);
         this.scripts.set(entity.id, definition);
         this.crewMovement.set(entity.id, { home: { ...entity.position }, path: [], replan: 0, target: null });
+        selected.set(entity.id, placement);
         actor.root.setEnabled(Math.hypot(entity.position.x - SPAWN.x, entity.position.y - SPAWN.y) <= 110 * PIXELS_PER_METRE);
         actor.sync(entity.position, entity.heading, false, 0);
       }
     }
+    this.actors.forEach((entity, index) => this.createBrain(entity, selected.get(entity.id)!, crewCandidates, index));
   }
 
   get activeNPC() { return this.active; }
   get activeConversation() { return this.conversation; }
+  get brainStates(): BrainState[] { return [...this.brains.values()].map((brain) => brain.state); }
+
+  getBrainContext(npcId: string): BrainContext | null {
+    const brain = this.brains.get(npcId);
+    const entity = this.actors.find((actor) => actor.id === npcId);
+    if (!brain || !entity || this.disposed) return null;
+    const nearby = this.actors.filter((other) => other !== entity &&
+      Math.hypot(other.position.x - entity.position.x, other.position.y - entity.position.y) < 12 * PIXELS_PER_METRE);
+    const events = nearby.slice(0, 3).map((other) => `npc_nearby:${other.id}`);
+    if (this.trafficCentres.some((point) => Math.hypot(point.x - entity.position.x, point.y - entity.position.y) <= 14 * PIXELS_PER_METRE))
+      events.push("traffic_nearby");
+    if (entity.crewId && this.phase === "pursuit" && entity.crewId === this.rivalCrew)
+      events.push("crew_routine_override");
+    if (brain.stage === "waiting") events.push("routine_waiting");
+    return { profile: { ...brain.profile, goals: brain.profile.goals.map((goal) => ({ ...goal })) },
+      currentGoal: brain.goal.id, needs: { ...brain.needs }, memory: [...brain.memory],
+      recentChat: brain.recentChat.map((turn) => ({ ...turn })), nearbyEvents: events.slice(0, 4) };
+  }
+
+  applyBrainDecision(npcId: string, decision: BrainDecision) {
+    if (this.disposed) return false;
+    return this.brains.get(npcId)?.apply(decision, !!this.active) ?? false;
+  }
+
+  localBrainReply(npcId: string, userText: string) {
+    return this.brains.get(npcId)?.localReply(userText) ?? "Hoesit. Let's catch up another time.";
+  }
+
+  rememberChat(npcId: string, userText: string, reply: string) {
+    if (!this.disposed) this.brains.get(npcId)?.chat(userText, reply);
+  }
   get crewState(): CrewState {
     const joined = CREWS.find((crew) => crew.id === this.affiliation);
     const rival = CREWS.find((crew) => crew.id === this.rivalCrew);
@@ -307,6 +343,10 @@ export class NeighbourhoodNpcs {
 
   setTrafficSolids(polygons: Polygon[]) {
     this.trafficCollision = polygons.length ? new Collision([], polygons) : null;
+    this.trafficCentres = polygons.filter((polygon) => polygon.points.length).map((polygon) => ({
+      x: polygon.points.reduce((sum, point) => sum + point.x, 0) / polygon.points.length,
+      y: polygon.points.reduce((sum, point) => sum + point.y, 0) / polygon.points.length,
+    }));
   }
 
   leaveCrew() {
@@ -326,9 +366,15 @@ export class NeighbourhoodNpcs {
       if (this.active) {
         if (entity === this.active) entity.heading = Math.atan2(player.x - entity.position.x, -(player.y - entity.position.y));
       } else {
-        const patrol = this.patrols.get(entity.id);
-        if (patrol) moving = this.walk(entity, patrol, elapsed, player);
-        else if (entity.crewId) moving = this.moveCrew(entity, elapsed, player);
+        const brain = this.brains.get(entity.id)!;
+        brain.flush();
+        if (entity.crewId) {
+          moving = this.moveCrew(entity, elapsed, player);
+          const home = this.crewMovement.get(entity.id)!.home;
+          const overriding = this.phase === "pursuit" && entity.crewId === this.rivalCrew;
+          if (!overriding) brain.tick(elapsed,
+            Math.hypot(entity.position.x - home.x, entity.position.y - home.y) <= 0.8, moving, moving);
+        } else moving = this.followGoal(entity, brain, elapsed, player);
       }
       const visible = entity === this.active || Math.hypot(entity.position.x - player.x, entity.position.y - player.y) <= 110 * PIXELS_PER_METRE;
       entity.actor.root.setEnabled(visible);
@@ -386,9 +432,11 @@ export class NeighbourhoodNpcs {
     this.close();
     this.disposed = true;
     for (const entity of this.actors) entity.actor.dispose();
-    this.patrols.clear();
+    this.brains.clear();
+    this.goalMovement.clear();
     this.crewMovement.clear();
     this.trafficCollision = null;
+    this.trafficCentres = [];
   }
 
   private showNode(): Conversation {
@@ -545,35 +593,138 @@ export class NeighbourhoodNpcs {
     if (this.trafficCollision?.blocked(position.x, position.y, BODY_RADIUS)) Object.assign(position, previous);
   }
 
-  private walk(entity: NpcEntity, patrol: Patrol, dt: number, player: MapPoint) {
-    // A pedestrian waits for someone standing in their way rather than clipping through them.
-    if (Math.hypot(entity.position.x - player.x, entity.position.y - player.y) < 1.1 * PIXELS_PER_METRE) return false;
-    if (patrol.wait > 0) { patrol.wait = Math.max(0, patrol.wait - dt); return false; }
-    const destination = patrol.route[patrol.index];
-    const dx = destination.x - entity.position.x, dy = destination.y - entity.position.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance < 1) {
-      patrol.index = (patrol.index + 1) % patrol.route.length;
-      patrol.wait = 0.5 + (patrol.phase % 3) * 0.4;
+  private createBrain(entity: NpcEntity, placement: Placement, candidates: Placement[], ordinal: number) {
+    let home = { ...entity.position };
+    if (entity.patrolRoute && this.clearGoal(entity.patrolRoute[0], BODY_RADIUS + 0.3)) home = { ...entity.patrolRoute[0] };
+    if (entity.id === "neighbour_soraya") {
+      // Her opening greeting is on the spawn refuge. After greeting, everyday
+      // chores happen on the pavement so a return-home task cannot occupy a lane.
+      const doorstep = candidates.map((candidate) => {
+        const nearest = motorSegments.map(({ road, a, b }) => ({ road, point: projection(candidate.position, a, b) }))
+          .sort((a, b) => Math.hypot(a.point.x - candidate.position.x, a.point.y - candidate.position.y) -
+            Math.hypot(b.point.x - candidate.position.x, b.point.y - candidate.position.y))[0];
+        if (!nearest) return candidate.position;
+        const dx = candidate.position.x - nearest.point.x, dy = candidate.position.y - nearest.point.y, distance = Math.hypot(dx, dy);
+        // Leave the parking verge to the parked hatchback; use the inner pavement.
+        const shift = Math.max(0, distance - nearest.road.width / 2 - 0.95 * PIXELS_PER_METRE);
+        return { x: candidate.position.x - dx / distance * shift, y: candidate.position.y - dy / distance * shift };
+      }).filter((point) =>
+        motorSegments.every(({ road, a, b }) => { const nearest = projection(point, a, b);
+          return Math.hypot(point.x - nearest.x, point.y - nearest.y) >= road.width / 2 + 0.65 * PIXELS_PER_METRE; }) &&
+        this.clearGoalLine(entity.position, point, BODY_RADIUS + 0.3) &&
+        this.actors.every((other) => other === entity || Math.hypot(point.x - other.position.x, point.y - other.position.y) >= 2 * PIXELS_PER_METRE))
+        .sort((a, b) => Math.hypot(a.x - entity.position.x, a.y - entity.position.y) - Math.hypot(b.x - entity.position.x, b.y - entity.position.y))[0];
+      if (doorstep) home = { ...doorstep };
+    }
+    const available = candidates.map((candidate) => candidate.position).filter((point) =>
+      Math.hypot(point.x - home.x, point.y - home.y) <= 35 * PIXELS_PER_METRE &&
+      Math.hypot(point.x - home.x, point.y - home.y) >= 3.5 * PIXELS_PER_METRE &&
+      this.actors.every((other) => other === entity || Math.hypot(point.x - other.position.x, point.y - other.position.y) >= 2 * PIXELS_PER_METRE) &&
+      this.clearGoalLine(entity.position, point, BODY_RADIUS + 0.3));
+    const preferred = entity.patrolRoute?.[1] ?? placement.route[1];
+    available.sort((a, b) => Math.hypot(a.x - preferred.x, a.y - preferred.y) - Math.hypot(b.x - preferred.x, b.y - preferred.y));
+    const errand = available[0] ? { ...available[0] } : { ...home };
+    const near = [...available].sort((a, b) => Math.hypot(a.x - home.x, a.y - home.y) - Math.hypot(b.x - home.x, b.y - home.y));
+    const social = near[0] ? { ...near[0] } : { ...home };
+    // Sellers and crew contacts keep their established stall/corner. The personal
+    // tasks differ, but these roles do not abandon contacts during normal play.
+    const anchored = entity.role === "vendor" || entity.role === "crew";
+    const brain = new NpcBrain(entity.id, { home, rest: { ...home },
+      errand: anchored ? { ...home } : errand, social: anchored ? { ...home } : social }, ordinal);
+    this.brains.set(entity.id, brain);
+    this.goalMovement.set(entity.id, { path: [], target: null, replan: 0, blockedFor: 0,
+      speed: (entity.id === "jogger_carmen" ? 1.65 : 1.15 + ordinal % 3 * 0.1) * PIXELS_PER_METRE,
+      wait: entity.patrolRoute ? 0.6 : 0 });
+  }
+
+  private followGoal(entity: NpcEntity, brain: NpcBrain, dt: number, player: MapPoint) {
+    const movement = this.goalMovement.get(entity.id)!;
+    const target = brain.target;
+    const distance = Math.hypot(entity.position.x - target.x, entity.position.y - target.y);
+    const arrived = distance <= 0.6 * PIXELS_PER_METRE;
+    const greetingHold = entity.id === "neighbour_soraya" && brain.lived < 25;
+    const talkingDistance = Math.hypot(entity.position.x - player.x, entity.position.y - player.y) <= TALK_RANGE && this.clearLine(player, entity.position);
+    if (greetingHold || talkingDistance || movement.wait > 0) {
+      movement.wait = Math.max(0, movement.wait - dt);
+      brain.tick(dt, arrived, !arrived, false);
+      if (talkingDistance) entity.heading = Math.atan2(player.x - entity.position.x, -(player.y - entity.position.y));
       return false;
     }
-    const travel = Math.min(distance, patrol.speed * dt);
-    const steps = Math.max(1, Math.ceil(travel / (BODY_RADIUS / 2)));
+    if (arrived) { movement.path = []; movement.blockedFor = 0; brain.tick(dt, true, false, false); return false; }
+    movement.replan = Math.max(0, movement.replan - dt);
+    const changed = !movement.target || Math.hypot(movement.target.x - target.x, movement.target.y - target.y) > 0.1;
+    if (changed) { movement.path = []; movement.replan = 0; movement.blockedFor = 0; movement.target = { ...target }; }
+    if (this.clearGoalLine(entity.position, target, BODY_RADIUS + 0.3) &&
+      movement.path.length <= 1) movement.path = [{ ...target }];
+    else if (!movement.path.length && movement.replan === 0) {
+      movement.path = this.goalNavigation.route(entity.position, target); movement.replan = 1.2;
+    }
+    while (movement.path.length && Math.hypot(entity.position.x - movement.path[0].x, entity.position.y - movement.path[0].y) < 1.2) movement.path.shift();
+    const destination = movement.path[0];
+    if (!destination) { brain.tick(dt, false, true, false); return false; }
+    const dx = destination.x - entity.position.x, dy = destination.y - entity.position.y, length = Math.hypot(dx, dy);
+    const travel = Math.min(length, movement.speed * dt);
     const old = { ...entity.position };
+    const steps = Math.max(1, Math.ceil(travel / (BODY_RADIUS / 2)));
     for (let step = 0; step < steps; step++) {
-      const next = { x: entity.position.x + dx / distance * travel / steps, y: entity.position.y + dy / distance * travel / steps };
-      const occupied = this.actors.some((other) => other !== entity && Math.hypot(other.position.x - next.x, other.position.y - next.y) < BODY_RADIUS * 2.2);
-      if (occupied || Math.hypot(next.x - player.x, next.y - player.y) < BODY_RADIUS * 2.2) break;
-      this.moveStep(entity.position, dx / distance * travel / steps, dy / distance * travel / steps);
+      const mx = dx / length * travel / steps, my = dy / length * travel / steps;
+      const next = { x: entity.position.x + mx, y: entity.position.y + my };
+      if (!this.clearGoal(next) || Math.hypot(next.x - player.x, next.y - player.y) < BODY_RADIUS * 2.2 ||
+        this.actors.some((other) => other !== entity && Math.hypot(other.position.x - next.x, other.position.y - next.y) < BODY_RADIUS * 2.2)) break;
+      this.moveStep(entity.position, mx, my);
     }
-    const movedX = entity.position.x - old.x, movedY = entity.position.y - old.y;
-    const moving = Math.hypot(movedX, movedY) > 0.001;
-    if (moving) entity.heading = Math.atan2(movedX, -movedY);
-    else if (!this.clearLine(entity.position, destination, BODY_RADIUS)) {
-      patrol.index = (patrol.index + 1) % patrol.route.length;
-      patrol.wait = 1;
+    const mx = entity.position.x - old.x, my = entity.position.y - old.y;
+    const moving = Math.hypot(mx, my) > 0.001;
+    if (moving) { entity.heading = Math.atan2(mx, -my); movement.blockedFor = 0; }
+    else {
+      movement.blockedFor += dt;
+      // Once traffic has yielded to a crossing pedestrian, both must not wait
+      // for one another forever. A fresh bounded search can go around the car.
+      if (movement.blockedFor > 2.5 && movement.replan === 0) this.goalDetour(entity, movement, target);
     }
+    brain.tick(dt, Math.hypot(entity.position.x - target.x, entity.position.y - target.y) <= 0.6 * PIXELS_PER_METRE, !moving, moving);
     return moving;
+  }
+
+  private goalDetour(entity: NpcEntity, movement: GoalMovement, target: MapPoint) {
+    const open = (point: MapPoint) => this.clearGoal(point, BODY_RADIUS) &&
+      !this.trafficCollision?.blocked(point.x, point.y, BODY_RADIUS) &&
+      this.actors.every((other) => other === entity || Math.hypot(other.position.x - point.x, other.position.y - point.y) >= BODY_RADIUS * 2.2);
+    const line = (a: MapPoint, b: MapPoint) => {
+      const distance = Math.hypot(b.x - a.x, b.y - a.y), steps = Math.max(1, Math.ceil(distance));
+      for (let index = 0; index <= steps; index++) {
+        const t = index / steps;
+        if (!open({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })) return false;
+      }
+      return true;
+    };
+    // Dynamic occupancy is intentionally never kept in the static route cache.
+    const path = new CrewNavigation(open, line).route(entity.position, target);
+    movement.replan = 2.5;
+    if (path.length) { movement.path = path; movement.blockedFor = 0; return; }
+    const dx = target.x - entity.position.x, dy = target.y - entity.position.y, length = Math.hypot(dx, dy);
+    if (!length) return;
+    for (const side of [1, -1]) {
+      const point = { x: entity.position.x + (dx / length - dy / length * side) * 1.6 * PIXELS_PER_METRE,
+        y: entity.position.y + (dy / length + dx / length * side) * 1.6 * PIXELS_PER_METRE };
+      if (!this.outsideTrafficLanes(point) || !this.clearGoalLine(entity.position, point, BODY_RADIUS + 0.3) ||
+        !this.clearGoalLine(point, target, BODY_RADIUS + 0.3) ||
+        this.actors.some((other) => other !== entity && Math.hypot(other.position.x - point.x, other.position.y - point.y) < BODY_RADIUS * 3)) continue;
+      movement.path = [point, { ...target }]; movement.blockedFor = 0; movement.replan = 1.2; break;
+    }
+  }
+
+  private clearGoal(point: MapPoint, radius = BODY_RADIUS) {
+    return this.clear(point, radius) && !this.fieldCollision.blocked(point.x, point.y, radius);
+  }
+
+  private clearGoalLine(a: MapPoint, b: MapPoint, radius = BODY_RADIUS) {
+    const distance = Math.hypot(b.x - a.x, b.y - a.y), steps = Math.max(1, Math.ceil(distance / Math.min(1, radius)));
+    for (let index = 0; index <= steps; index++) {
+      const t = index / steps;
+      if (!this.clearGoal({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, radius)) return false;
+    }
+    return true;
   }
 
   private clear(point: MapPoint, radius = BODY_RADIUS) {

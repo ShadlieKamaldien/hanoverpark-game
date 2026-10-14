@@ -25,6 +25,7 @@ import { Traffic } from "./traffic";
 import { CREWS } from "./crews";
 import { DriveableCar } from "./driveableCar";
 import { DrivingCamera } from "./drivingCamera";
+import { BrainClient } from "./brainClient";
 
 const ui = new PreviewInterface();
 
@@ -43,6 +44,7 @@ function startPreview() {
   const sky = new PreviewSky(scene);
   const player = new PreviewPlayer(scene);
   const npcs = new NeighbourhoodNpcs(scene);
+  const brains = new BrainClient(npcs);
   const traffic = new Traffic(scene);
   const car = new DriveableCar(scene);
   const target = () => (car.occupied ? car.actor.root.position : player.mesh.position).add(new Vector3(0, 1.1, 0));
@@ -172,12 +174,21 @@ function startPreview() {
     ui.vehicleStatus({ driving: car.occupied, speed: car.speed,
       gear: Math.abs(car.speed) < 0.05 ? "park" : car.speed < 0 ? "reverse" : "forward",
       message: car.exitMessage });
+    updateNpcPlan();
+  };
+
+  const updateNpcPlan = () => {
+    const id = ui.dialogueOpen ? npcs.activeNPC?.id : undefined;
+    const state = id ? npcs.brainStates.find((entry) => entry.npcId === id) : null;
+    ui.setNpcBrain(state ? { goalLabel: state.goal.label, stage: state.stage,
+      progress: state.progress, source: state.source, say: state.say } : null);
   };
 
   const keys = new Set<string>();
   const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight", "Space"]);
   let started = false, paused = false, disposed = false, failed = false;
   let hudElapsed = 0;
+  let chatSerial = 0;
   let orbitHeld = false, orbitGrace = 0;
   const stopCameraDrift = () => {
     camera.inertialAlphaOffset = 0;
@@ -186,8 +197,12 @@ function startPreview() {
   };
   const closeConversation = () => {
     keys.clear();
+    chatSerial++;
+    brains.cancelChat();
     npcs.close();
     ui.closeDialogue();
+    ui.clearChat();
+    ui.setNpcBrain(null);
     if (started && !paused && !failed) camera.attachControl(ui.canvas, true);
   };
   const openConversation = () => {
@@ -195,12 +210,16 @@ function startPreview() {
     const conversation = npcs.interact(player.position);
     if (!conversation) return;
     keys.clear();
+    chatSerial++;
+    brains.cancelChat();
+    ui.clearChat();
     camera.detachControl();
     camera.inertialAlphaOffset = 0;
     camera.inertialBetaOffset = 0;
     camera.inertialRadiusOffset = 0;
     ui.prompt(null);
     ui.dialogue(conversation);
+    updateNpcPlan();
   };
   const interactionPrompt = () => {
     if (!started || paused || failed || ui.dialogueOpen) return null;
@@ -223,15 +242,37 @@ function startPreview() {
   ui.onInteract = interact;
   ui.onDialogueChoice = (id) => {
     keys.clear();
+    chatSerial++;
+    brains.cancelChat();
+    ui.chatPending(false);
     const conversation = npcs.choose(id);
-    if (conversation) ui.dialogue(conversation);
+    if (conversation) { ui.dialogue(conversation); updateNpcPlan(); }
     else closeConversation();
   };
   ui.onDialogueClose = closeConversation;
+  ui.onChatSubmit = async (text) => {
+    const entity = npcs.activeNPC;
+    if (!started || paused || failed || disposed || !ui.dialogueOpen || !entity) return;
+    const serial = ++chatSerial;
+    ui.chatPending(true);
+    try {
+      const reply = await brains.chat(entity.id, text);
+      if (serial !== chatSerial || disposed || failed || paused ||
+        !ui.dialogueOpen || npcs.activeNPC?.id !== entity.id) return;
+      ui.chatReply(reply.say, reply.source);
+      updateNpcPlan();
+    } catch {
+      if (serial === chatSerial && !disposed && !failed && !paused && ui.dialogueOpen &&
+        npcs.activeNPC?.id === entity.id) ui.chatReply(npcs.localBrainReply(entity.id, text), "local");
+    } finally {
+      if (serial === chatSerial && !disposed && !failed && !paused && ui.dialogueOpen) ui.chatPending(false);
+    }
+  };
   const setPaused = (value: boolean) => {
     if (!started || failed) return;
     paused = value;
     keys.clear();
+    if (value) brains.suspend();
     stopCameraDrift();
     orbitHeld = false;
     if (value) { closeConversation(); ui.prompt(null); }
@@ -257,12 +298,13 @@ function startPreview() {
   ui.setView(viewPreset);
   ui.onLightingChanged = lightScene;
   const keydown = (event: KeyboardEvent) => {
-    if (!started || failed || event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
+    if (!started || failed || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.code === "Escape" && !event.repeat) {
       event.preventDefault();
       if (ui.dialogueOpen) closeConversation(); else setPaused(!paused);
       return;
     }
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
     if (event.code === "KeyE" && !event.repeat) { event.preventDefault(); interact(); return; }
     if (!paused && !ui.dialogueOpen && movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
   };
@@ -284,6 +326,8 @@ function startPreview() {
     if (import.meta.env.DEV && error) console.error(error);
     failed = true;
     keys.clear();
+    chatSerial++;
+    brains.suspend();
     npcs.close();
     camera.detachControl();
     engine.stopRenderLoop();
@@ -321,6 +365,7 @@ function startPreview() {
       }
       drivingCamera.update(dt, !frozen && car.occupied);
       npcs.update(dt, player.position, !started || paused, car.occupied);
+      brains.update(dt, player.position, !frozen);
       sun.position.copyFrom(target().subtract(sun.direction.scale(100)));
       Frustum.GetPlanesToRef(shadows.getTransformMatrix(), shadowFrustum);
       sky.update(camera.position, sun.direction);
@@ -336,7 +381,7 @@ function startPreview() {
     } catch (error) { fail(error); }
   });
   if (import.meta.env.DEV) {
-    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, traffic, car, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
+    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, traffic, car, brains, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
   }
   const pagehide = (event: PageTransitionEvent) => {
     if (event.persisted) blur();
@@ -355,7 +400,7 @@ function startPreview() {
     window.removeEventListener("pointercancel", orbitEnd);
     document.removeEventListener("visibilitychange", visibility);
     window.removeEventListener("pagehide", pagehide);
-    drivingCamera.dispose(); car.dispose(); traffic.dispose(); npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
+    brains.dispose(); drivingCamera.dispose(); car.dispose(); traffic.dispose(); npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
   };
   window.addEventListener("pagehide", pagehide);
   if (import.meta.hot) import.meta.hot.dispose(dispose);

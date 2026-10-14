@@ -20,6 +20,13 @@ export interface VehicleStatus {
   gear: "forward" | "reverse" | "park";
   message?: string;
 }
+export interface NpcBrainStatus {
+  goalLabel: string;
+  stage: string;
+  progress: number;
+  source: "local" | "llm";
+  say?: string;
+}
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -42,6 +49,7 @@ export class PreviewInterface {
   onInteract: (() => void) | null = null;
   onDialogueChoice: ((id: string) => void) | null = null;
   onDialogueClose: (() => void) | null = null;
+  onChatSubmit: ((text: string) => void) | null = null;
 
   private readonly startOverlay = element<HTMLElement>("preview-start");
   private readonly pauseOverlay = element<HTMLElement>("preview-pause");
@@ -68,6 +76,16 @@ export class PreviewInterface {
   private readonly dialogueText = element<HTMLElement>("preview-dialogue-text");
   private readonly dialogueChoices = element<HTMLElement>("preview-dialogue-choices");
   private readonly dialogueCloseButton = element<HTMLButtonElement>("preview-dialogue-close");
+  private readonly npcGoal = element<HTMLElement>("preview-npc-goal");
+  private readonly npcGoalLabel = element<HTMLElement>("preview-npc-goal-label");
+  private readonly npcGoalStage = element<HTMLElement>("preview-npc-goal-stage");
+  private readonly npcGoalProgress = element<HTMLProgressElement>("preview-npc-goal-progress");
+  private readonly npcGoalSay = element<HTMLElement>("preview-npc-goal-say");
+  private readonly chatForm = element<HTMLFormElement>("preview-chat-form");
+  private readonly chatInput = element<HTMLInputElement>("preview-chat-input");
+  private readonly chatSendButton = element<HTMLButtonElement>("preview-chat-send");
+  private readonly chatReplyText = element<HTMLElement>("preview-chat-reply");
+  private readonly chatStatusText = element<HTMLElement>("preview-chat-status");
   private readonly lightingButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>("[data-lighting]"),
   );
@@ -77,6 +95,7 @@ export class PreviewInterface {
   private crewAnnouncementKey = "";
   private driving = false;
   private crewPhase = "normal";
+  private chatIsPending = false;
 
   constructor() {
     this.canvas.inert = true;
@@ -91,9 +110,19 @@ export class PreviewInterface {
       this.closeDialogue();
     });
     this.dialogueOverlay.addEventListener("keydown", (event) => {
+      // Inputs keep movement keys, but Escape always returns to the street.
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        this.onDialogueClose?.();
+        this.closeDialogue();
+        return;
+      }
       if (event.key !== "Tab") return;
-      const buttons = Array.from(this.dialogueOverlay.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
-      const first = buttons[0], last = buttons[buttons.length - 1];
+      const controls = Array.from(this.dialogueOverlay.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href], [tabindex='0']",
+      )).filter((node) => !node.closest("[hidden], [inert]") && node.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
       if (!first || !last) return;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
@@ -102,6 +131,15 @@ export class PreviewInterface {
         event.preventDefault();
         first.focus({ preventScroll: true });
       }
+    });
+    this.chatInput.addEventListener("input", () => this.updateChatAvailability());
+    this.chatForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = this.chatInput.value.trim().slice(0, 280);
+      if (!this.dialogueOpen || this.chatIsPending || !text || !this.onChatSubmit) return;
+      this.chatInput.value = "";
+      this.chatPending(true);
+      this.onChatSubmit(text);
     });
     element<HTMLButtonElement>("preview-recenter").addEventListener("click", () => {
       this.onRecenter?.();
@@ -270,6 +308,7 @@ export class PreviewInterface {
   }
 
   closeDialogue(): void {
+    this.chatPending(false);
     if (!this.dialogueOpen) return;
     this.dialogueOverlay.hidden = true;
     this.hud.inert = this.paused;
@@ -280,6 +319,50 @@ export class PreviewInterface {
 
   get dialogueOpen(): boolean {
     return !this.dialogueOverlay.hidden;
+  }
+
+  setNpcBrain(state: NpcBrainStatus | null): void {
+    this.npcGoal.hidden = state === null;
+    if (!state) return;
+    this.npcGoal.dataset.stage = state.stage;
+    this.npcGoal.dataset.goalSource = state.source;
+    if (this.npcGoalLabel.textContent !== state.goalLabel) this.npcGoalLabel.textContent = state.goalLabel;
+    const stage = state.stage === "travel" || state.stage === "travelling" ? "On the way"
+      : state.stage === "doing" || state.stage === "work" || state.stage === "working" ? "Busy with it" : "Taking a moment";
+    if (this.npcGoalStage.textContent !== stage) this.npcGoalStage.textContent = stage;
+    this.npcGoalProgress.value = Number.isFinite(state.progress) ? Math.min(1, Math.max(0, state.progress)) : 0;
+    const say = state.say?.trim() ?? "";
+    this.npcGoalSay.hidden = !say;
+    if (this.npcGoalSay.textContent !== say) this.npcGoalSay.textContent = say;
+  }
+
+  chatPending(pending: boolean): void {
+    this.chatIsPending = pending;
+    this.chatForm.setAttribute("aria-busy", String(pending));
+    // Keep the input focused while the answer arrives; another submission waits.
+    this.updateChatAvailability();
+    const text = pending ? "Thinking…" : "";
+    if (this.chatStatusText.textContent !== text) this.chatStatusText.textContent = text;
+  }
+
+  chatReply(text: string, source: "local" | "llm"): void {
+    this.chatPending(false);
+    this.chatReplyText.dataset.replySource = source;
+    this.chatReplyText.textContent = text;
+    this.chatReplyText.hidden = !text.trim();
+  }
+
+  clearChat(): void {
+    this.chatPending(false);
+    this.chatInput.value = "";
+    this.chatReplyText.textContent = "";
+    this.chatReplyText.hidden = true;
+    delete this.chatReplyText.dataset.replySource;
+    this.updateChatAvailability();
+  }
+
+  private updateChatAvailability(): void {
+    this.chatSendButton.disabled = this.chatIsPending || !this.chatInput.value.trim();
   }
 
   error(message?: string): void {

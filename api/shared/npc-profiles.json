@@ -1,0 +1,165 @@
+{
+  "neighbour_soraya": {
+    "id": "neighbour_soraya", "name": "Aunty Soraya", "role": "neighbour",
+    "personality": "Warm, observant and practical. Greets neighbours, brings washing in before the wind, and takes a quiet breather afterwards. A fictional adult, never a real resident.",
+    "goals": [
+      { "id": "bring_in_washing", "label": "Bring in the washing", "need": "purpose", "activity": "home", "duration": 14 },
+      { "id": "check_neighbours", "label": "Check in with neighbours", "need": "social", "activity": "social", "duration": 10 },
+      { "id": "rest_after_chores", "label": "Rest after the chores", "need": "energy", "activity": "rest", "duration": 12 }
+    ]
+  },
+  "neighbour_moosa": {
+    "id": "neighbour_moosa", "name": "Boeta Moosa", "role": "neighbour",
+    "personality": "Patient and handy with repairs. Wants to finish fixing a squeaky gate, fetch a spare hinge, then have a friendly chat. A fictional adult.",
+    "goals": [
+      { "id": "fix_gate", "label": "Fix the loose gate hinge", "need": "purpose", "activity": "home", "duration": 15 },
+      { "id": "fetch_hinge", "label": "Fetch a spare hinge", "need": "purpose", "activity": "errand", "duration": 8 },
+      { "id": "gate_chat", "label": "Chat after the repair", "need": "social", "activity": "social", "duration": 10 },
+      { "id": "gate_break", "label": "Take a repair break", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "neighbour_patricia": {
+    "id": "neighbour_patricia", "name": "Aunty Patricia", "role": "neighbour",
+    "personality": "Sociable, organised and fond of a cup of tea. Wants to fetch a few groceries, get home to put the kettle on, and catch up with a neighbour. A fictional adult.",
+    "goals": [
+      { "id": "fetch_groceries", "label": "Fetch a few groceries", "need": "purpose", "activity": "errand", "duration": 8 },
+      { "id": "put_kettle_on", "label": "Get home and put the kettle on", "need": "energy", "activity": "home", "duration": 12 },
+      { "id": "tea_chat", "label": "Catch up over a tea break", "need": "social", "activity": "social", "duration": 10 }
+    ]
+  },
+  "vendor_nazeem": {
+    "id": "vendor_nazeem", "name": "Nazeem", "role": "vendor",
+    "personality": "Friendly and businesslike; friends call him Zeem. Keeps his stall tidy, checks chips and sweets stock, and chats with customers without claiming a real shop identity. A fictional adult.",
+    "goals": [
+      { "id": "sort_stall_stock", "label": "Sort the stall stock", "need": "purpose", "activity": "home", "duration": 14 },
+      { "id": "chat_customers", "label": "Greet customers at the stall", "need": "social", "activity": "social", "duration": 12 },
+      { "id": "stall_break", "label": "Take a short stall break", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "student_ashleigh": {
+    "id": "student_ashleigh", "name": "Ashleigh", "role": "neighbour",
+    "personality": "Thoughtful and quietly humorous; friends call her Ash. An adult student balancing revision, fresh air and a quick hello. A fictional adult.",
+    "goals": [
+      { "id": "study_notes", "label": "Review the study notes", "need": "purpose", "activity": "home", "duration": 14 },
+      { "id": "fresh_air_break", "label": "Take a fresh air break", "need": "energy", "activity": "errand", "duration": 9 },
+      { "id": "greet_study_friend", "label": "Say hello before studying again", "need": "social", "activity": "social", "duration": 8 }
+    ]
+  },
+  "pedestrian_wesley": {
+    "id": "pedestrian_wesley", "name": "Wesley", "role": "pedestrian",
+    "personality": "Easygoing and active; friends call him Wes. Wants to meet a friend for a kickabout at the court edge, then walk home and rest. A fictional adult.",
+    "goals": [
+      { "id": "meet_for_football", "label": "Meet for a kickabout by the court", "need": "social", "activity": "errand", "duration": 9 },
+      { "id": "walk_home", "label": "Walk home after football", "need": "purpose", "activity": "home", "duration": 8 },
+      { "id": "football_break", "label": "Catch a breath after football", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "commuter_luthando": {
+    "id": "commuter_luthando", "name": "Luthando", "role": "pedestrian",
+    "personality": "Calm and tired after work; friends call him Lu. Wants to finish the walk home, take a proper breather, and check on a neighbour. A fictional adult.",
+    "goals": [
+      { "id": "get_home_from_work", "label": "Get home after work", "need": "purpose", "activity": "home", "duration": 8 },
+      { "id": "recover_after_work", "label": "Rest after the commute", "need": "energy", "activity": "rest", "duration": 14 },
+      { "id": "evening_check_in", "label": "Check in before supper", "need": "social", "activity": "social", "duration": 9 }
+    ]
+  },
+  "jogger_carmen": {
+    "id": "jogger_carmen", "name": "Carmen", "role": "pedestrian",
+    "personality": "Encouraging and determined. Enjoys exercise, knows to recover between runs, and greets people along the way. A fictional adult.",
+    "goals": [
+      { "id": "exercise_circuit", "label": "Finish a short exercise leg", "need": "purpose", "activity": "errand", "duration": 6 },
+      { "id": "recover_from_jog", "label": "Recover after the jog", "need": "energy", "activity": "home", "duration": 10 },
+      { "id": "greet_walkers", "label": "Greet the other walkers", "need": "social", "activity": "social", "duration": 8 }
+    ]
+  },
+  "requester_shaun": {
+    "id": "requester_shaun", "name": "Shaun", "role": "requester",
+    "personality": "Has a difficult afternoon and asks for a R2, but accepts a refusal. Wants a brief, humane check-in and a quiet place to gather himself. His struggle with tik is a fictional personal situation, not a claim about real residents. A fictional adult.",
+    "goals": [
+      { "id": "shaun_check_in", "label": "Look for a friendly check-in", "need": "social", "activity": "social", "duration": 10 },
+      { "id": "shaun_quiet_break", "label": "Take a quiet break", "need": "energy", "activity": "rest", "duration": 12 },
+      { "id": "shaun_head_home", "label": "Get back to the home corner", "need": "purpose", "activity": "home", "duration": 9 }
+    ]
+  },
+  "requester_ricardo": {
+    "id": "requester_ricardo", "name": "Ricardo", "role": "requester",
+    "personality": "Reserved but grateful when someone listens; friends call him Rico. Asks for a R2 without pressure, then tries to collect his thoughts and move on. A fictional adult.",
+    "goals": [
+      { "id": "rico_check_in", "label": "Have a brief check-in", "need": "social", "activity": "social", "duration": 9 },
+      { "id": "rico_collect_thoughts", "label": "Collect thoughts in a quiet spot", "need": "energy", "activity": "rest", "duration": 11 },
+      { "id": "rico_return_home", "label": "Return to the home corner", "need": "purpose", "activity": "home", "duration": 9 }
+    ]
+  },
+  "stranger_darren": {
+    "id": "stranger_darren", "name": "Darren", "role": "stranger",
+    "personality": "Blunt and guarded; friends call him Daz. His existing fictional confrontation can end peacefully. Wants to linger briefly, move on and cool off; no model action may take money or hurt anyone. A fictional adult.",
+    "goals": [
+      { "id": "daz_linger", "label": "Linger near the home corner", "need": "social", "activity": "home", "duration": 10 },
+      { "id": "daz_move_on", "label": "Move on to a quieter spot", "need": "purpose", "activity": "errand", "duration": 8 },
+      { "id": "daz_cool_off", "label": "Cool off away from the road", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "stranger_brendan": {
+    "id": "stranger_brendan", "name": "Brendan", "role": "stranger",
+    "personality": "Impatient but able to leave a confrontation alone; friends call him Bren. Wants to wait at his corner, take a short walk and settle down. No model action may take money or hurt anyone. A fictional adult.",
+    "goals": [
+      { "id": "bren_wait_at_corner", "label": "Wait at the home corner", "need": "social", "activity": "home", "duration": 10 },
+      { "id": "bren_walk_away", "label": "Take a short walk away", "need": "purpose", "activity": "errand", "duration": 8 },
+      { "id": "bren_settle_down", "label": "Settle down before heading home", "need": "energy", "activity": "rest", "duration": 11 }
+    ]
+  },
+  "crew_ismail": {
+    "id": "crew_ismail", "name": "Ismail", "role": "crew",
+    "personality": "The calm voice of fictional Downberg Side; friends call him Izzy. Checks in with his mates, keeps the pavement clear and helps with home chores. Existing game rules alone decide crew reactions. A fictional adult.",
+    "goals": [
+      { "id": "izzy_check_mates", "label": "Check in with the Downberg mates", "need": "social", "activity": "social", "duration": 12 },
+      { "id": "izzy_home_duties", "label": "Sort out the home duties", "need": "purpose", "activity": "home", "duration": 12 },
+      { "id": "izzy_corner_break", "label": "Take a quiet corner break", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "crew_clayton": {
+    "id": "crew_clayton", "name": "Clayton", "role": "crew",
+    "personality": "Joking and football-minded; friends call him Clay. A member of fictional Downberg Side who arranges a kickabout, keeps his things ready and takes a break. Existing game rules alone decide crew reactions. A fictional adult.",
+    "goals": [
+      { "id": "clay_arrange_football", "label": "Arrange a kickabout with mates", "need": "social", "activity": "social", "duration": 11 },
+      { "id": "clay_sort_kit", "label": "Sort the football kit at home", "need": "purpose", "activity": "home", "duration": 12 },
+      { "id": "clay_rest", "label": "Rest before the kickabout", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "crew_andre": {
+    "id": "crew_andre", "name": "André", "role": "crew",
+    "personality": "Practical and observant; friends call him Dre. A member of fictional Downberg Side who minds the shared gate, greets his mates and rests between chores. Existing game rules alone decide crew reactions. A fictional adult.",
+    "goals": [
+      { "id": "dre_shared_gate", "label": "Check the shared gate", "need": "purpose", "activity": "home", "duration": 12 },
+      { "id": "dre_greet_mates", "label": "Greet the Downberg mates", "need": "social", "activity": "social", "duration": 11 },
+      { "id": "dre_gate_break", "label": "Take a break from the gate", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "crew_daniel": {
+    "id": "crew_daniel", "name": "Daniel", "role": "crew",
+    "personality": "Talkative and proud of a tidy shared entrance; friends call him Danie. A member of fictional Lansry Crew who checks on his mates and helps at home. Existing game rules alone decide crew reactions. A fictional adult.",
+    "goals": [
+      { "id": "danie_check_mates", "label": "Check in with the Lansry mates", "need": "social", "activity": "social", "duration": 12 },
+      { "id": "danie_tidy_entrance", "label": "Tidy the shared entrance", "need": "purpose", "activity": "home", "duration": 12 },
+      { "id": "danie_rest", "label": "Rest at the home corner", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "crew_marcel": {
+    "id": "crew_marcel", "name": "Marcel", "role": "crew",
+    "personality": "Easygoing and music-loving; friends call him Marz. A member of fictional Lansry Crew who shares a chat, sorts his music things and enjoys a quiet breather. Existing game rules alone decide crew reactions. A fictional adult.",
+    "goals": [
+      { "id": "marz_music_chat", "label": "Chat about music with mates", "need": "social", "activity": "social", "duration": 11 },
+      { "id": "marz_sort_music", "label": "Sort the music things at home", "need": "purpose", "activity": "home", "duration": 12 },
+      { "id": "marz_quiet_break", "label": "Enjoy a quiet breather", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  },
+  "crew_yusuf": {
+    "id": "crew_yusuf", "name": "Yusuf", "role": "crew",
+    "personality": "Quiet, helpful and considerate of neighbours; friends call him Yus. A member of fictional Lansry Crew who keeps access clear, catches up with mates and rests. Existing game rules alone decide crew reactions. A fictional adult.",
+    "goals": [
+      { "id": "yus_clear_access", "label": "Keep the shared access clear", "need": "purpose", "activity": "home", "duration": 12 },
+      { "id": "yus_catch_up", "label": "Catch up with the Lansry mates", "need": "social", "activity": "social", "duration": 11 },
+      { "id": "yus_rest", "label": "Rest after helping at home", "need": "energy", "activity": "rest", "duration": 10 }
+    ]
+  }
+}

@@ -8,9 +8,9 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; overflow: hidden; }
-button, a { -webkit-tap-highlight-color: transparent; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; cursor: pointer; }
-button:focus-visible, a:focus-visible, canvas:focus-visible {
+button:focus-visible, a:focus-visible, input:focus-visible, canvas:focus-visible {
   outline: 3px solid #fff1c6;
   outline-offset: 3px;
 }
@@ -160,13 +160,16 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   width: 600px;
   max-width: 100%;
   max-height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border: 1px solid #a4b594;
   border-top: 3px solid var(--preview-gold);
   background: #142820f7;
   box-shadow: 0 10px 50px #0005;
-  padding: 24px 28px 18px;
 }
+.preview-dialogue-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px 28px 16px; }
+.preview-dialogue-footer { flex-shrink: 0; padding: 0 28px 18px; }
 .preview-dialogue-card h2 { margin: 10px 0 14px; font-size: 26px; letter-spacing: -.5px; }
 #preview-dialogue-text { margin: 0 0 20px; color: #e2e8d9; font-size: 15px; line-height: 1.65; white-space: pre-line; }
 .preview-dialogue-choices { display: grid; gap: 8px; }
@@ -181,6 +184,28 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   line-height: 1.4;
 }
 .preview-dialogue-choices button:hover { border-color: var(--preview-gold); background: #edbd5926; }
+.preview-npc-goal { margin: 0 0 18px; padding: 12px 14px; border: 1px solid #8fa18270; background: #22372a; }
+.preview-npc-goal-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.preview-npc-goal-heading .preview-eyebrow { font-size: 9px; letter-spacing: 1.2px; }
+#preview-npc-goal-stage { color: #b8c7b1; font-size: 10px; }
+.preview-npc-goal h3 { margin: 7px 0 10px; color: #f3ecd8; font-size: 13px; line-height: 1.4; font-weight: normal; }
+#preview-npc-goal-progress { display: block; width: 100%; height: 5px; border: 0; border-radius: 0; appearance: none; background: #51654b; accent-color: var(--preview-gold); }
+#preview-npc-goal-progress::-webkit-progress-bar { background: #51654b; }
+#preview-npc-goal-progress::-webkit-progress-value { background: var(--preview-gold); }
+#preview-npc-goal-progress::-moz-progress-bar { background: var(--preview-gold); }
+#preview-npc-goal-say { margin: 10px 0 0; color: #c7d0bd; font-size: 12px; line-height: 1.5; white-space: pre-line; }
+.preview-chat { margin-top: 20px; padding-top: 16px; border-top: 1px solid #8fa18255; }
+.preview-chat label { display: block; margin-bottom: 8px; font-size: 12px; color: #f3ecd8; font-weight: bold; }
+.preview-chat-entry { display: flex; gap: 8px; }
+.preview-chat-entry input { flex: 1; min-width: 0; min-height: 44px; border: 1px solid #91a185; border-radius: 0; background: #112720; color: #f3ecd8; padding: 10px 12px; font: inherit; font-size: 13px; }
+.preview-chat-entry input::placeholder { color: #9eaf96; }
+.preview-chat-entry input:disabled { opacity: .65; }
+.preview-chat-entry button { min-height: 44px; min-width: 64px; padding: 10px 14px; border: 1px solid var(--preview-gold); background: var(--preview-gold); color: var(--preview-ink); font-size: 12px; font-weight: bold; }
+.preview-chat-entry button:hover:not(:disabled) { background: #ffe0a0; }
+.preview-chat-entry button:disabled { opacity: .45; cursor: default; }
+.preview-chat-hint { margin: 7px 0 0; font-size: 10px; color: #b8c7b1; }
+.preview-chat-status { min-height: 15px; margin: 9px 0 0; color: var(--preview-gold); font-size: 11px; }
+.preview-chat-reply { margin: 8px 0 0; border-left: 2px solid var(--preview-gold); padding-left: 12px; color: #e2e8d9; font-size: 14px; line-height: 1.65; white-space: pre-line; overflow-wrap: anywhere; }
 .preview-dialogue-close {
   display: block;
   width: 100%;
@@ -273,7 +298,8 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   .preview-map { bottom: 14px; }
   .preview-vehicle-status { bottom: 262px; }
   .preview-dialogue-overlay { padding: 16px; }
-  .preview-dialogue-card { padding: 18px 22px 14px; }
+  .preview-dialogue-body { padding: 18px 22px 14px; }
+  .preview-dialogue-footer { padding: 0 22px 14px; }
   .preview-dialogue-card h2 { font-size: 23px; margin: 8px 0 12px; }
   #preview-dialogue-text { font-size: 14px; margin-bottom: 14px; }
 }
@@ -296,7 +322,8 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   .preview-interact-prompt { left: 14px; bottom: 70px; max-width: calc(100% - 205px); }
   .preview-interact-prompt button { padding: 10px 12px; font-size: 11px; }
   .preview-dialogue-overlay { padding: 14px; }
-  .preview-dialogue-card { padding: 18px; }
+  .preview-dialogue-body { padding: 18px; }
+  .preview-dialogue-footer { padding: 0 18px 18px; }
   .preview-map { width: 174px; right: 14px; bottom: 35px; padding: 6px; }
   .preview-vehicle-status { width: 174px; right: 14px; bottom: 234px; padding: 9px 10px; }
   #preview-minimap { width: 160px; height: 131px; }

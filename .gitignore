@@ -4,3 +4,6 @@ test-results/
 playwright-report/
 *.log
 .cache/
+.env
+.env.*
+api/local.settings.json
