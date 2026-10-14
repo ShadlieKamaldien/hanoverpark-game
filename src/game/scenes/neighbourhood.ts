@@ -2,19 +2,25 @@ import Phaser from "phaser";
 import { WORLD, SPAWN, type SaveData } from "../config/constants";
 import { Player } from "../entities/player";
 import { Vehicle } from "../entities/vehicle";
-import { NPCS } from "../entities/npc";
+import { NPCS, STREET_LINES } from "../entities/npc";
 import { Collision } from "../systems/collision";
 import { loadSave, saveProgress } from "../systems/save";
 import { DeliveryMission, DESTINATION } from "../missions/delivery";
 import { createArt } from "../world/art";
 import { BUILDINGS, drawWorld } from "../world/neighbourhood";
 import { Interface } from "../ui/interface";
+import { Ambience } from "../systems/ambience";
+import { StreetVoices } from "../systems/streetVoices";
 
 export class Neighbourhood extends Phaser.Scene {
   player!: Player;
   car!: Vehicle;
   collision!: Collision;
   ui!: Interface;
+  audio = new Ambience();
+  voices = new StreetVoices();
+  private streetClock = 0;
+  private streetLine = 0;
   mission = new DeliveryMission();
   money = 0;
   driving = false;
@@ -86,7 +92,33 @@ export class Neighbourhood extends Phaser.Scene {
     ) as Record<string, Phaser.Input.Keyboard.Key>;
     this.ui = new Interface();
     this.ui.onStart = (continuing) => this.start(continuing);
-    this.ui.onResume = () => (this.paused = false);
+    this.ui.onResume = () => {
+      this.paused = false;
+      this.audio.setPaused(false);
+      this.audio.initialize();
+    };
+    this.ui.onCloseDialogue = () => {
+      this.voices.cancel();
+      this.audio.setPaused(false);
+      this.audio.initialize();
+    };
+    this.ui.onSoundToggle = () => {
+      this.audio.setMuted(!this.audio.muted);
+      if (this.audio.muted) this.voices.cancel();
+      else this.audio.initialize();
+      this.syncSoundUI();
+    };
+    this.ui.onVolumeChanged = (volume) => {
+      this.audio.setVolume(volume);
+      this.voices.cancel();
+      this.audio.initialize();
+      this.syncSoundUI();
+    };
+    this.ui.onVoiceToggle = (enabled) => {
+      this.voices.setEnabled(enabled);
+      this.syncSoundUI();
+    };
+    this.syncSoundUI();
     // Discrete DOM events avoid replaying queued Phaser key events on rapid taps.
     window.addEventListener("keydown", (e) => {
       if (e.repeat || !this.started) return;
@@ -95,8 +127,12 @@ export class Neighbourhood extends Phaser.Scene {
         if (this.ui.blocked) {
           this.ui.close();
           this.paused = false;
+          this.audio.setPaused(false);
+          this.audio.initialize();
         } else {
           this.paused = true;
+          this.voices.cancel();
+          this.audio.setPaused(true);
           this.store();
           this.ui.pause(() => this.store());
         }
@@ -114,6 +150,8 @@ export class Neighbourhood extends Phaser.Scene {
     this.game.events.on(Phaser.Core.Events.BLUR, () => {
       if (this.started) {
         this.store();
+        this.audio.setPaused(true);
+        this.voices.cancel();
         if (!this.ui.blocked) {
           this.paused = true;
           this.ui.pause(() => this.store());
@@ -122,13 +160,25 @@ export class Neighbourhood extends Phaser.Scene {
     });
     window.addEventListener("pagehide", () => {
       if (this.started) this.store();
+      this.audio.dispose();
+      this.voices.cancel();
     });
     // Read-only development state plus positioning for repeatable browser tests.
     if (import.meta.env.DEV)
       (window as unknown as { __game: Neighbourhood }).__game = this;
     this.drawMap();
   }
+  syncSoundUI() {
+    this.ui.soundSettings(
+      this.audio.muted,
+      this.audio.volume,
+      this.voices.enabled,
+      this.audio.available,
+    );
+  }
   start(continuing: boolean) {
+    this.audio.setPaused(false);
+    this.audio.initialize();
     const d = continuing ? loadSave() : null;
     this.player.x = d?.x ?? SPAWN.x;
     this.player.y = d?.y ?? SPAWN.y;
@@ -153,6 +203,7 @@ export class Neighbourhood extends Phaser.Scene {
     this.ui.start();
     this.store();
     this.refreshHUD();
+    this.syncSoundUI();
     this.ui.notify(
       this.mission.status === "complete"
         ? "Welcome back to the block, Riyaad!"
@@ -208,9 +259,10 @@ export class Neighbourhood extends Phaser.Scene {
         const text =
           npc.name === "Aunty Fatima" && this.mission.status !== "available"
             ? this.mission.status === "active"
-              ? "Maak gou, Riyaad! Block C is across the neighbourhood — follow the gold diamond on your map."
-              : "Thank you, my child! Everything arrived safe. Here's your R150. You're always welcome on this block."
+              ? "Thank you for helping, Riyaad. Straight to Block C — she is waiting by the front door. No need to rush through the courtyard."
+              : "Everything arrived safely. Thank you, my child. You earned that R150. Come say hello whenever you pass."
             : npc.dialogue;
+        this.voices.speak(text, this.audio.muted ? 0 : this.audio.volume);
         this.ui.dialogue(
           npc.name,
           text,
@@ -222,6 +274,7 @@ export class Neighbourhood extends Phaser.Scene {
                 this.ui.notify("GROCERIES COLLECTED · Head to Block C");
               }
             : undefined,
+          npc.help,
         );
         return;
       }
@@ -255,6 +308,9 @@ export class Neighbourhood extends Phaser.Scene {
   update(time: number, delta: number) {
     if (!this.ui) return;
     const dt = Math.min(delta / 1000, 0.04);
+    this.audio.setPaused(
+      !this.started || this.ui.blocked || this.paused || document.hidden,
+    );
     if (!this.started || this.ui.blocked || this.paused) return;
     const dx =
       Number(this.keys.D.isDown || this.keys.RIGHT.isDown) -
@@ -262,6 +318,8 @@ export class Neighbourhood extends Phaser.Scene {
     const dy =
       Number(this.keys.S.isDown || this.keys.DOWN.isDown) -
       Number(this.keys.W.isDown || this.keys.UP.isDown);
+    const oldX = this.player.x,
+      oldY = this.player.y;
     if (this.driving) {
       this.car.update(-dy, dx, dt, this.collision);
       this.player.x = this.car.x;
@@ -289,6 +347,40 @@ export class Neighbourhood extends Phaser.Scene {
         this.collision,
       );
       this.collision.solids.pop();
+    }
+    const onRoad =
+      (this.player.y >= 700 && this.player.y <= 840) ||
+      (this.player.y >= 1390 && this.player.y <= 1530) ||
+      (this.player.x >= 480 && this.player.x <= 700) ||
+      (this.player.x >= 1130 && this.player.x <= 1380) ||
+      (this.player.x >= 2000 && this.player.x <= 2190);
+    this.audio.update(dt, {
+      x: this.player.x,
+      y: this.player.y,
+      driving: this.driving,
+      speed: this.car.speed,
+      walking: Math.hypot(this.player.x - oldX, this.player.y - oldY) > 0.1,
+      sprinting: this.keys.SHIFT.isDown && this.player.stamina > 2,
+      surface: onRoad
+        ? "road"
+        : this.player.y > 1200 && this.player.x > 1400
+          ? "earth"
+          : "pavement",
+    });
+    this.streetClock += dt;
+    if (this.streetClock > 12) {
+      this.streetClock = 0;
+      const nearby = STREET_LINES.find(
+        (zone) => this.distance(zone.x, zone.y) < zone.radius,
+      );
+      if (nearby) {
+        const line = nearby.lines[this.streetLine++ % nearby.lines.length];
+        this.ui.caption(nearby.speaker, line);
+        this.voices.speak(
+          line,
+          this.audio.muted ? 0 : this.audio.volume * 0.65,
+        );
+      }
     }
     this.worldTime += dt;
     this.light.setAlpha((0.14 * (1 - Math.cos(this.worldTime / 90))) / 2);
@@ -398,6 +490,11 @@ export class Neighbourhood extends Phaser.Scene {
       c.closePath();
       c.fill();
     }
+    c.font = "7px monospace";
+    c.fillStyle = "#183c31";
+    c.fillText("SHOP", 19, 66);
+    c.fillText("RANK", 75, 118);
+    c.fillText("PITCH", 155, 146);
     c.fillStyle = "#91d7cf";
     c.fillRect(this.car.x * sx - 2, this.car.y * sy - 3, 4, 6);
     c.fillStyle = "#fffbe1";

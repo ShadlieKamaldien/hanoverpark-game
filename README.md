@@ -50,7 +50,7 @@ npm test
 
 Tests automatically use `/usr/bin/chromium` when present; `CHROMIUM_PATH` can specify another compatible executable. Otherwise they use the downloaded Playwright browser. Cloud setup uses the preinstalled Chromium and requires no browser download.
 
-The five browser tests exercise keyboard movement and sprinting, building collision, all three NPC conversations, mission acceptance/completion, single reward, refresh persistence, pause, map toggle, corrupted-save rejection, and entering/driving/steering/braking/colliding/exiting the car. Isolated interaction tests use a development-only positioning hook to shorten travel; a separate end-to-end test walks from the actual spawn to the mission destination using keyboard input without teleporting. The development hook is absent from production builds. A production-preview smoke test checks startup, real keyboard movement, mission acceptance and refresh persistence without that hook.
+The seven browser tests exercise keyboard movement and sprinting, building collision, all three NPC conversations, mission acceptance/completion, single reward, refresh persistence, pause, map toggle, corrupted-save rejection, and entering/driving/steering/braking/colliding/exiting the car. Isolated interaction tests use a development-only positioning hook to shorten travel; a separate end-to-end test walks from the actual spawn to the mission destination using keyboard input without teleporting. The development hook is absent from production builds. A production-preview smoke test checks startup, real keyboard movement, mission acceptance and refresh persistence without that hook.
 
 ## Structure
 
@@ -70,7 +70,7 @@ Vite builds to `dist/`; `public/staticwebapp.config.json` is copied into that ou
 
 Includes a 2400×1800 scrolling neighbourhood, flats with balconies/washing lines/stairs, corner shop and takeaway, taxi rank, parked vehicles, pitch, trees, streetlights, fences, wandering pedestrians, three named NPCs, one driveable car, one complete mission, menus, HUD, minimap and a gradual lighting cycle.
 
-Not included: interiors, combat, ambient moving traffic, recorded music/audio, additional missions or vehicles, touch/mobile controls, exact street geography, multiplayer or paid AI dialogue. Health is tracked and saved; this peaceful prototype has no combat/damage system. Desktop keyboard play is the intended workflow. Phaser is a substantial dependency and Vite reports a bundle-size advisory; the production build succeeds.
+Not included: interiors, combat, ambient moving traffic, recorded local voices/music, additional missions or vehicles, touch/mobile controls, exact street geography, multiplayer or paid AI dialogue. Health is tracked and saved; this peaceful prototype has no combat/damage system. Desktop keyboard play is the intended workflow. Phaser is a substantial dependency and Vite reports a bundle-size advisory; the production build succeeds.
 
 ## Deploy a new Azure Free Static Web App
 
@@ -80,3 +80,15 @@ Not included: interiors, combat, ambient moving traffic, recorded music/audio, a
 4. Open the Azure URL, start the game, complete the delivery and refresh to verify persistence on that origin. Local development saves do not transfer to the Azure URL.
 
 The workflow is manual: ordinary source pushes run build validation and do not redeploy production. Selecting a branch in this deployment workflow publishes that selected branch to production. No database, Functions API, paid SKU or other service is configured.
+
+## Neighbourhood atmosphere update
+
+Buildings now have distinct council-flat, shop and garage treatments, with original roof/façade depth, balconies, stairs, washing lines, surface wear and more detailed original character/vehicle artwork. The taxi rank has fictional minibuses. The geography and businesses remain fictional.
+
+Sound starts after Start/Continue and is generated locally with Web Audio: breeze, varied footsteps, an engine that responds to the hatchback's speed, and distance-sensitive shop, taxi-rank and football-pitch ambience. Mute and volume controls are in the top bar, persist independently of your save, and audio stops on pause or loss of focus. No downloaded clips, external audio service or paid API is needed.
+
+Nearby original conversation snippets appear as captions. The optional **Voices** switch uses an installed English browser speech-synthesis voice when available; it is off by default, has no guaranteed local accent, and is not a recording of residents. Captions work even when your browser has no voice pack. NPC character dialogue now separates conversation from keyboard instructions. Convincing local voice performances remain a future contribution from consenting local speakers.
+
+The new audio browser tests measure actual Web Audio output, check that sound zones follow location, verify mute/volume and pause/resume, confirm preference persistence, and exercise gameplay without a Web Audio API. It does not claim to validate cultural accuracy or recorded speech.
+
+Area-specific live research was attempted but the cloud network policy blocked the candidate public sources before their pages could be read. [Research status and follow-up](docs/authenticity-research.md) documents that limitation and separates fictional design choices from facts still needing verification. The research site allowlist has been saved in the cloud configuration draft; live research can resume after the network settings are applied. These changes are not described as resident-verified Hanover Park geography or speech.
