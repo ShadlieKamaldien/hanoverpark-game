@@ -12,11 +12,17 @@ import { MAP, distanceToRoad, gameCoordinates } from "../world/mapData";
 import { Interface } from "../ui/interface";
 import { Ambience } from "../systems/ambience";
 import { StreetVoices } from "../systems/streetVoices";
+import { EncounterSystem, type EncounterActor } from "../systems/encounters";
 
 export class Neighbourhood extends Phaser.Scene {
   player!: Player;
   car!: Vehicle;
   collision!: Collision;
+  encounters!: EncounterSystem;
+  encounterSprites = new Map<string, {
+    sprite: Phaser.GameObjects.Sprite;
+    label: Phaser.GameObjects.Text;
+  }>();
   ui!: Interface;
   audio = new Ambience();
   voices = new StreetVoices();
@@ -49,6 +55,16 @@ export class Neighbourhood extends Phaser.Scene {
       drawWorld(this),
       MAP.buildings.map((b) => ({ points: b.points, holes: b.holes })),
     );
+    this.encounters = new EncounterSystem(this.collision);
+    for (const actor of this.encounters.actors) {
+      const sprite = this.add.sprite(actor.x, actor.y, `${actor.texture}-down-0`).setDepth(30);
+      const label = this.add.text(actor.x, actor.y - 36, actor.kind === "request" ? `${actor.name} · R2?` : actor.name, {
+        fontFamily: "monospace", fontSize: "11px", color: "#fff0d1",
+        backgroundColor: actor.kind === "request" ? "#315f5ce8" : "#733e32e8",
+        padding: { x: 6, y: 4 },
+      }).setOrigin(0.5).setDepth(32);
+      this.encounterSprites.set(actor.id, { sprite, label });
+    }
     this.car = new Vehicle(this, MAP.locations.car.x, MAP.locations.car.y);
     this.player = new Player(this, SPAWN.x, SPAWN.y);
     for (const npc of NPCS) {
@@ -100,7 +116,11 @@ export class Neighbourhood extends Phaser.Scene {
       this.audio.setPaused(false);
       this.audio.initialize();
     };
-    this.ui.onCloseDialogue = () => {
+    this.ui.onCloseDialogue = (reason) => {
+      if (reason === "dismiss" && this.encounters.dismissDialog()) {
+        this.store();
+        this.ui.encounterStatus("KEEP MOVING · Shift to sprint, or reach the car", true);
+      }
       this.voices.cancel();
       this.audio.setPaused(false);
       this.audio.initialize();
@@ -203,6 +223,7 @@ export class Neighbourhood extends Phaser.Scene {
       this.car.x = MAP.locations.car.x;
       this.car.y = MAP.locations.car.y;
     }
+    this.encounters.restore(sameWorld ? d?.encounters : d?.encounters ? { ...d.encounters, active: undefined } : undefined);
     this.started = true;
     this.ui.start();
     this.store();
@@ -215,6 +236,10 @@ export class Neighbourhood extends Phaser.Scene {
           ? `Groceries on board · ${DESTINATION.name} is waiting.`
           : "Awe, Riyaad! Aunty Fatima is waiting by Shoprite.",
     );
+    if (this.encounters.active && this.encounters.phase === "demand")
+      this.robberyDialogue(this.encounters.active);
+    else if (this.encounters.phase === "chase")
+      this.ui.encounterStatus("KEEP MOVING · Shift to sprint, or reach the car", true);
   }
   store() {
     if (!this.started) return;
@@ -230,6 +255,7 @@ export class Neighbourhood extends Phaser.Scene {
       carX: this.car.x,
       carY: this.car.y,
       carAngle: this.car.angle,
+      encounters: this.encounters.snapshot(),
     };
     if (!saveProgress(d))
       this.ui.notify(
@@ -257,7 +283,16 @@ export class Neighbourhood extends Phaser.Scene {
       return;
     }
     if (!this.driving) {
-      const npc = NPCS.find((n) => this.distance(n.x, n.y) < 70);
+      if (this.encounters.phase && this.distance(this.car.x, this.car.y) >= 80) {
+        this.ui.notify("Keep moving, my bru — reach some space or the car!");
+        return;
+      }
+      const encounter = this.encounters.phase ? null : this.encounters.nearestRequest(this.player);
+      if (encounter) {
+        this.requestDialogue(encounter);
+        return;
+      }
+      const npc = this.encounters.phase ? undefined : NPCS.find((n) => this.distance(n.x, n.y) < 70);
       if (npc) {
         const available =
           npc.name === "Aunty Fatima" && this.mission.status === "available";
@@ -312,6 +347,83 @@ export class Neighbourhood extends Phaser.Scene {
       );
     }
   }
+  requestDialogue(actor: EncounterActor) {
+    this.voices.speak(actor.dialogue, this.audio.muted ? 0 : this.audio.volume);
+    this.ui.choiceDialogue(actor.name, actor.dialogue, [
+      { id: "refuse", label: "NO, SORRY", onChoose: () => {
+        if (this.encounters.refuse(actor.id)) {
+          this.store();
+          this.ui.notify("Sharp, my bru. Hou mooi.");
+        }
+      } },
+      { id: "later", label: "MAYBE LATER", onChoose: () => this.ui.notify("Come back when you want to talk.") },
+      { id: "give", label: "GIVE R2", disabled: this.money < 2, onChoose: () => {
+        const result = this.encounters.giveR2(actor.id, this.money);
+        this.money = result.money;
+        this.store();
+        this.refreshHUD();
+        if (result.paid) this.ui.notify("−R2 · Dankie, my bru. Sharp sharp.");
+      } },
+    ], this.money < 2 ? "You need R2 to give. You can refuse or return later." : "Giving R2 is optional. You can also say no.");
+  }
+  robberyDialogue(actor: EncounterActor) {
+    const amount = Math.min(20, this.money);
+    this.voices.speak(actor.dialogue, this.audio.muted ? 0 : this.audio.volume);
+    this.ui.encounterStatus("A STRANGER IS DEMANDING CASH", true);
+    this.ui.choiceDialogue(actor.name, actor.dialogue, [
+      { id: "run", label: "BACK AWAY & RUN", onChoose: () => {
+        this.encounters.run();
+        this.store();
+        this.ui.encounterStatus("KEEP MOVING · Shift to sprint, or reach the car", true);
+      } },
+      { id: "pay", label: amount > 0 ? `HAND OVER R${amount}` : "SHOW EMPTY POCKETS", onChoose: () => {
+        const result = this.encounters.surrender(actor.id, this.money);
+        this.money = result.money;
+        this.store();
+        this.refreshHUD();
+        this.ui.encounterStatus(null);
+        this.ui.notify(result.lost > 0 ? `−R${result.lost} · The stranger takes the cash and leaves.` : "No cash to take. The stranger moves on.");
+      } },
+    ], "Choose how to respond. If you run, hold Shift and move away, or enter the car. Getting caught costs up to R20.", "warning");
+  }
+  updateEncounters(dt: number, time: number) {
+    if (!this.driving) {
+      const halfW = Math.abs(Math.cos(this.car.angle)) * 18 + Math.abs(Math.sin(this.car.angle)) * 31;
+      const halfH = Math.abs(Math.sin(this.car.angle)) * 18 + Math.abs(Math.cos(this.car.angle)) * 31;
+      this.collision.solids.push({ x: this.car.x - halfW, y: this.car.y - halfH, w: halfW * 2, h: halfH * 2 });
+    }
+    const event = this.encounters.update(dt, this.player, this.driving);
+    if (!this.driving) this.collision.solids.pop();
+    if (event && "caught" in event) {
+      const loss = Math.min(this.money, event.caught.lostCap);
+      this.money -= loss;
+      this.store();
+      this.refreshHUD();
+      this.ui.encounterStatus(null);
+      this.ui.notify(loss > 0 ? `CAUGHT · −R${loss}. The stranger leaves.` : "The stranger finds no cash and leaves.");
+    } else if (event && "escaped" in event) {
+      this.store();
+      this.ui.encounterStatus(null);
+      this.ui.notify("YOU GOT AWAY · Your money is safe.");
+    }
+    if (this.encounters.phase === "chase")
+      this.ui.encounterStatus("KEEP MOVING · Shift to sprint, or reach the car", true);
+    for (const actor of this.encounters.actors) {
+      const view = this.encounterSprites.get(actor.id)!;
+      const moved = Math.hypot(actor.x - view.sprite.x, actor.y - view.sprite.y) > 0.1;
+      const direction = actor.x > view.sprite.x ? "right" : "left";
+      view.sprite.setPosition(actor.x, actor.y).setAlpha(actor.resolved ? 0.65 : 1);
+      if (moved) view.sprite.setTexture(`${actor.texture}-${direction}-${Math.floor(time / 220) % 2}`);
+      view.label.setPosition(actor.x, actor.y - 36).setVisible(!actor.resolved);
+    }
+    if (this.mission.status === "complete" && !this.driving && !this.encounters.phase) {
+      const robber = this.encounters.nearbyRobber(this.player);
+      if (robber && this.encounters.beginRobbery(robber.id)) {
+        this.store();
+        this.robberyDialogue(robber);
+      }
+    }
+  }
   update(time: number, delta: number) {
     if (!this.ui) return;
     const dt = Math.min(delta / 1000, 0.04);
@@ -354,6 +466,12 @@ export class Neighbourhood extends Phaser.Scene {
         this.collision,
       );
       this.collision.solids.pop();
+    }
+    this.updateEncounters(dt, time);
+    if (this.ui.blocked) {
+      this.refreshHUD();
+      this.drawMap();
+      return;
     }
     this.audio.update(dt, {
       x: this.player.x,
@@ -435,8 +553,11 @@ export class Neighbourhood extends Phaser.Scene {
     else if (this.driving)
       prompt = `${Math.round(Math.abs(this.car.speed) * 0.22)} km/h · E to exit when stopped`;
     else {
+      const request = this.encounters.nearestRequest(this.player);
       const n = NPCS.find((n) => this.distance(n.x, n.y) < 70);
-      if (n) prompt = `E · Talk to ${n.name}`;
+      if (this.encounters.phase === "chase") prompt = this.distance(this.car.x, this.car.y) < 80 ? "E · Get into the car" : "Shift + WASD · Get away";
+      else if (request) prompt = `E · ${request.name} is asking for R2`;
+      else if (n) prompt = `E · Talk to ${n.name}`;
       else if (this.distance(this.car.x, this.car.y) < 80)
         prompt = "E · Borrow the mint hatchback";
     }
@@ -516,6 +637,13 @@ export class Neighbourhood extends Phaser.Scene {
       c.lineTo(target.x * sx, target.y * sy + 5);
       c.lineTo(target.x * sx - 4, target.y * sy);
       c.closePath();
+      c.fill();
+    }
+    for (const actor of this.encounters.actors) {
+      if (actor.resolved) continue;
+      c.fillStyle = actor.kind === "request" ? "#9ad6d2" : "#f29272";
+      c.beginPath();
+      c.arc(actor.x * sx, actor.y * sy, 2.5, 0, Math.PI * 2);
       c.fill();
     }
     c.fillStyle = "#91d7cf";

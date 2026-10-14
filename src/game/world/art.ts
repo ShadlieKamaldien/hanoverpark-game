@@ -37,6 +37,22 @@ export function createArt(scene: Phaser.Scene) {
       style: "hair",
     },
     {
+      prefix: "robber-navy",
+      shirt: 0x3c4e62,
+      shade: 0x283847,
+      skin: 0x855b43,
+      hair: 0x343c34,
+      style: "cap",
+    },
+    {
+      prefix: "robber-rust",
+      shirt: 0xa36448,
+      shade: 0x7b4736,
+      skin: 0xb78059,
+      hair: 0x5c4334,
+      style: "hair",
+    },
+    {
       prefix: "walker0",
       shirt: 0xa97569,
       shade: 0x855b55,

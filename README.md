@@ -70,6 +70,14 @@ Sound starts after Start/Continue and is generated locally with Web Audio: breez
 
 Nearby conversation snippets appear as captions. Optional **Synth Voices** uses an installed English browser speech-synthesis voice when available. It is off by default and has no guaranteed local accent. Recorded performances from consenting local speakers would be needed for authentic spoken voices. Captions and gameplay work without Web Audio or a voice pack.
 
+## Street encounters
+
+Shaun and Rico are fictional adult neighbours who ask for R2. Speak with E, choose **Give R2**, **No, sorry** or **Maybe later**. Giving needs enough cash; refusal costs nothing. Paying or refusing resolves that person's request for the save. Shaun's original dialogue mentions struggling with tik; these characters do not represent actual residents.
+
+After the first delivery, two separate fictional strangers can demand cash when you approach them on foot. Respond by handing over up to R20 or backing away and running. Hold Shift with movement keys to sprint, or enter the car to escape. A collision-aware chase ends when you get enough distance, reach the car, or evade the stranger for ten simulation seconds. Getting caught takes at most R20 and never makes the balance negative. Each robbery resolves once, with a cooldown before another can begin. Escape closes a demand into a chase; it does not silently cancel it.
+
+Blue minimap dots show unresolved R2 requests; red dots show unresolved strangers. The encounters use clear mapped road positions while their characters, dialogue and behaviour are fictional. Their position is not evidence about crime or residents at a mapped shop/court. Requests and thieves are separate characters. Payments, refusals, escapes and catches save immediately. Active demands/chases resume on Continue; pause and dialogue freeze chase time. Old saves start with these new encounters unresolved while retaining earned money and delivery progress.
+
 ## Browser tests
 
 ```sh
@@ -79,7 +87,7 @@ npm test
 
 Tests use `/usr/bin/chromium` when present; `CHROMIUM_PATH` can specify another compatible executable. Otherwise they use the downloaded Playwright browser. Cloud setup uses preinstalled Chromium.
 
-Seven browser tests cover movement/sprint, rotated building collision, NPC conversations, mission/reward, save migration and refresh, pause/map, car handling, spatial audio output, mute/volume persistence, and gameplay without Web Audio. Isolated interaction tests use a development-only positioning hook. A separate test walks the actual street route with keyboard input and no teleporting. Production-preview checks verify startup, keyboard movement, mission persistence, attribution and downloadable map data; the positioning hook is absent from production.
+Eleven browser tests cover movement/sprint, rotated building collision, NPC conversations, mission/reward, save migration and refresh, pause/map, car handling, spatial audio output, mute/volume persistence, gameplay without Web Audio, optional R2 giving/refusal, robbery payment caps, keyboard escape, catches, and encounter pause/refresh persistence. Isolated interaction tests use a development-only positioning hook. A separate test walks the actual street route with keyboard input and no teleporting. Production-preview checks verify startup, keyboard movement, mission persistence, attribution and downloadable map data; the positioning hook is absent from production.
 
 ## Structure and scope
 
@@ -91,7 +99,7 @@ Seven browser tests cover movement/sprint, rotated building collision, NPC conve
 - `src/game/ui/`: menus, dialogue, source guide and HUD
 - `scripts/`: map acquisition and projection using the Python standard library
 
-The approximately 15254×12749 pixel world includes a minimap, three named NPCs, wandering pedestrians, one driveable car, one mission and a gradual lighting cycle. Desktop keyboard play is intended. Interiors, combat, ambient moving traffic, additional missions/vehicles, touch controls and multiplayer are not implemented. Health is tracked and saved; this peaceful prototype has no damage system. Phaser produces a bundle-size advisory; the production build succeeds.
+The approximately 15254×12749 pixel world includes a minimap, three main NPCs, four fictional street encounters, wandering pedestrians, one driveable car, one mission and a gradual lighting cycle. Desktop keyboard play is intended. Interiors, combat, ambient moving traffic, additional missions/vehicles, touch controls and multiplayer are not implemented. Health is tracked and saved; robbery encounters affect money and have no combat/damage system. Phaser produces a bundle-size advisory; the production build succeeds.
 
 ## Azure Static Web Apps
 

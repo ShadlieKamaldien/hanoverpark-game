@@ -142,3 +142,7 @@ Earlier OSM CONNECT failures are **historical diagnostics**, superseded by succe
 Remaining work is to expand and cross-check incomplete building/court coverage, resolve unmapped public facilities and ambiguous aliases, confirm business details through current official listings, and obtain locally reviewed language/voice references. Current municipal data or field-reviewed evidence would strengthen the community map, but its absence does not erase the sourced OSM geometry already imported.
 
 Do not claim a complete, surveyed or exact present-day simulation. Keep mapped evidence, historical planning proposals and original gameplay choices distinguishable. Refreshes should preserve attribution/licence and source timestamps, validate geometry, and leave unknown entries null rather than filling them from order, approximate resemblance or guessed geocoding.
+
+## Fictional street encounter update
+
+Four adult characters now use clear road-node positions for optional R2 requests and separate robbery attempts. Their appearance, tik-related dialogue, names and behaviour are original fiction. The OSM geometry only supplies walkable placement; it is not evidence about drug use or crime at any mapped business, court or street. There are no real-person claims, copied voices or named real shop staff.

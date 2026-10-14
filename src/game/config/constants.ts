@@ -1,4 +1,5 @@
 import { MAP } from "../world/mapData";
+import type { EncounterSnapshot } from "../systems/encounters";
 export const WORLD = { width: MAP.width, height: MAP.height };
 export const WORLD_ID = MAP.id;
 export const SPAWN = MAP.locations.spawn;
@@ -14,4 +15,5 @@ export interface SaveData {
   carX: number;
   carY: number;
   carAngle: number;
+  encounters?: EncounterSnapshot;
 }
