@@ -1,12 +1,13 @@
 import type { Scene } from "@babylonjs/core/scene";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { MapPoint, MapRoad } from "../game/world/mapData";
-import { Collision } from "../game/systems/collision";
-import { BUILDINGS, PREVIEW, ROADS, SPAWN } from "./map";
+import { Collision, type Polygon } from "../game/systems/collision";
+import { BUILDINGS, FIELDS, PREVIEW, ROADS, SPAWN } from "./map";
 import { NpcActor, type Appearance } from "./npcActor";
 import { PROPERTY_SOLIDS } from "./properties";
+import { CREWS, CrewNavigation, type CrewPhase, type CrewState } from "./crews";
 
-export type NpcRole = "neighbour" | "vendor" | "pedestrian" | "requester" | "stranger";
+export type NpcRole = "neighbour" | "vendor" | "pedestrian" | "requester" | "stranger" | "crew";
 export interface Conversation {
   speaker: string;
   text: string;
@@ -17,6 +18,7 @@ export interface NpcEntity {
   readonly name: string;
   readonly nickname?: string;
   readonly role: NpcRole;
+  readonly crewId?: string;
   readonly position: MapPoint;
   readonly actor: NpcActor;
   readonly patrolRoute?: readonly MapPoint[];
@@ -29,6 +31,7 @@ type Definition = {
   name: string;
   nickname?: string;
   role: NpcRole;
+  crewId?: string;
   appearance: Appearance;
   anchor: MapPoint;
   patrol?: boolean;
@@ -36,10 +39,21 @@ type Definition = {
 };
 type Placement = { position: MapPoint; heading: number; route: MapPoint[]; road: MapRoad };
 type Patrol = { route: MapPoint[]; index: number; speed: number; wait: number; phase: number };
+type CrewMovement = { home: MapPoint; path: MapPoint[]; replan: number; target: MapPoint | null };
 
 const BODY_RADIUS = 3.2;
 const PIXELS_PER_METRE = 1 / PREVIEW.metresPerPixel;
 const TALK_RANGE = 2.75 * PIXELS_PER_METRE;
+const WARNING_RANGE = 13 * PIXELS_PER_METRE;
+const WARNING_GRACE = 5;
+const MAX_PURSUIT = 18;
+const motorSegments = ROADS.filter((road) => !["path", "footway", "steps", "pedestrian", "cycleway"].includes(road.kind) &&
+  road.width >= 8 * PIXELS_PER_METRE).flatMap((road) => road.points.slice(1).map((b, index) => ({ road, a: road.points[index], b })));
+const projection = (point: MapPoint, a: MapPoint, b: MapPoint): MapPoint => {
+  const dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy;
+  const t = length ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length)) : 0;
+  return { x: a.x + dx * t, y: a.y + dy * t };
+};
 const farewell = [{ id: "dismiss", label: "Cheers, see you around." }];
 const at = (dx: number, dy: number): MapPoint => ({ x: SPAWN.x + dx, y: SPAWN.y + dy });
 const courtAnchor = (name: string, fallback: MapPoint): MapPoint => {
@@ -203,13 +217,24 @@ const definitions: Definition[] = [
   },
 ];
 
-/** Fictional dialogue does not mutate the real game's money, health or saves. */
+/** Original crews keep affiliations and pursuit outcomes in this session only. */
 export class NeighbourhoodNpcs {
   readonly actors: NpcEntity[] = [];
   readonly shadowCasters: AbstractMesh[] = [];
   private readonly collision = new Collision([], [...BUILDINGS.map((building) => ({ points: building.points, holes: building.holes })), ...PROPERTY_SOLIDS]);
+  private readonly fieldCollision = new Collision([], FIELDS.map((field) => ({ points: field.points, holes: field.holes })));
   private readonly scripts = new Map<string, Definition>();
   private readonly patrols = new Map<string, Patrol>();
+  private readonly crewMovement = new Map<string, CrewMovement>();
+  private readonly navigation = new CrewNavigation((point) => this.clear(point, BODY_RADIUS + 0.3),
+    (a, b) => this.clearLine(a, b, BODY_RADIUS + 0.3));
+  private trafficCollision: Collision | null = null;
+  private affiliation: string | null = null;
+  private phase: CrewPhase = "neutral";
+  private rivalCrew: string | null = null;
+  private phaseTime = 0;
+  private lostSightTime = 0;
+  private cooldown = 0;
   private active: NpcEntity | null = null;
   private conversation: Conversation | null = null;
   private dialogueNode = "start";
@@ -235,15 +260,65 @@ export class NeighbourhoodNpcs {
       actor.root.setEnabled(Math.hypot(entity.position.x - SPAWN.x, entity.position.y - SPAWN.y) <= 110 * PIXELS_PER_METRE);
       actor.sync(entity.position, entity.heading, false, 0);
     });
+    const crewCandidates = this.crewCandidates(candidates);
+    for (const [crewIndex, crew] of CREWS.entries()) {
+      const anchor = crewIndex === 0 ? at(-210, -250) : at(520, -490);
+      const roadside = crewCandidates.filter((candidate) => candidate.road.name === crew.street);
+      const group = this.selectCrewGroup(roadside.length ? roadside : crewCandidates, anchor);
+      const centre = group[0].position;
+      for (const [index, member] of crew.members.entries()) {
+        const placement = group[index];
+        const definition: Definition = {
+          ...member, crewId: crew.id, role: "crew", anchor: centre,
+          appearance: { skin: member.skin, height: member.height, shirt: crew.colour,
+            trousers: index % 2 ? "#39444b" : "#414047", hair: "#302722", variant: "cap" },
+          dialogue: {},
+        };
+        const actor = new NpcActor(scene, definition.id, definition.appearance);
+        const entity: NpcEntity = { id: definition.id, name: definition.name, nickname: definition.nickname,
+          role: "crew", crewId: crew.id, position: { ...placement.position }, heading: placement.heading, actor };
+        this.actors.push(entity); this.shadowCasters.push(...actor.shadowCasters);
+        this.scripts.set(entity.id, definition);
+        this.crewMovement.set(entity.id, { home: { ...entity.position }, path: [], replan: 0, target: null });
+        actor.root.setEnabled(Math.hypot(entity.position.x - SPAWN.x, entity.position.y - SPAWN.y) <= 110 * PIXELS_PER_METRE);
+        actor.sync(entity.position, entity.heading, false, 0);
+      }
+    }
   }
 
   get activeNPC() { return this.active; }
   get activeConversation() { return this.conversation; }
+  get crewState(): CrewState {
+    const joined = CREWS.find((crew) => crew.id === this.affiliation);
+    const rival = CREWS.find((crew) => crew.id === this.rivalCrew);
+    const text: Record<CrewPhase, string> = {
+      neutral: "No crew · Speak to a crew contact to choose a side.",
+      joined: `Running with ${joined?.name ?? "your crew"}. Rival crews react to your colours.`,
+      warning: `${rival?.name}: Move along before this gets worse.`,
+      pursuit: `${rival?.name} are coming after you. Sprint away or speak to a contact to leave your crew.`,
+      escaped: `You got away. Keep some distance from ${rival?.name}.`,
+      caught: "They caught up. Move on, or speak to leave your crew.",
+    };
+    return { affiliation: this.affiliation, phase: this.phase, crewName: rival?.name ?? joined?.name,
+      text: text[this.phase], remaining: ["warning", "pursuit", "escaped", "caught"].includes(this.phase) ? this.phaseTime : undefined,
+      chasingIds: this.phase === "pursuit" ? this.actors.filter((entity) => entity.crewId === this.rivalCrew).map((entity) => entity.id) : [] };
+  }
+
+  setTrafficSolids(polygons: Polygon[]) {
+    this.trafficCollision = polygons.length ? new Collision([], polygons) : null;
+  }
+
+  leaveCrew() {
+    this.affiliation = null; this.phase = "neutral"; this.rivalCrew = null;
+    this.phaseTime = 0; this.lostSightTime = 0; this.cooldown = 15;
+  }
 
   update(dt: number, player: MapPoint, frozen: boolean) {
     if (this.disposed) return;
     if (frozen) return;
     const elapsed = Math.min(0.1, Math.max(0, dt));
+    // A conversation pauses everyone, including warning, chase and cooldown timers.
+    if (!this.active) this.updateCrewState(elapsed, player);
     for (const entity of this.actors) {
       let moving = false;
       if (this.active) {
@@ -251,6 +326,7 @@ export class NeighbourhoodNpcs {
       } else {
         const patrol = this.patrols.get(entity.id);
         if (patrol) moving = this.walk(entity, patrol, elapsed, player);
+        else if (entity.crewId) moving = this.moveCrew(entity, elapsed, player);
       }
       const visible = entity === this.active || Math.hypot(entity.position.x - player.x, entity.position.y - player.y) <= 110 * PIXELS_PER_METRE;
       entity.actor.root.setEnabled(visible);
@@ -287,6 +363,7 @@ export class NeighbourhoodNpcs {
 
   choose(choiceId: string): Conversation | null {
     if (!this.active || this.disposed) return null;
+    if (this.active.crewId) return this.chooseCrew(choiceId);
     const node = this.scripts.get(this.active.id)!.dialogue[this.dialogueNode];
     const choice = node.choices.find((item) => item.id === choiceId);
     if (!choice) return this.conversation;
@@ -308,16 +385,162 @@ export class NeighbourhoodNpcs {
     this.disposed = true;
     for (const entity of this.actors) entity.actor.dispose();
     this.patrols.clear();
+    this.crewMovement.clear();
+    this.trafficCollision = null;
   }
 
   private showNode(): Conversation {
     const entity = this.active!;
+    if (entity.crewId) return this.showCrew();
     const node = this.scripts.get(entity.id)!.dialogue[this.dialogueNode];
     this.conversation = {
       speaker: entity.nickname ? `${entity.name} ‘${entity.nickname}’` : entity.name, text: node.text,
       choices: node.choices.map(({ id, label }) => ({ id, label })),
     };
     return this.conversation;
+  }
+
+  private showCrew(): Conversation {
+    const entity = this.active!;
+    const crew = CREWS.find((item) => item.id === entity.crewId)!;
+    const other = CREWS.find((item) => item.id !== crew.id)!;
+    let text: string;
+    let choices: Conversation["choices"];
+    if (this.dialogueNode === "joined") {
+      text = `Awe. You're running with ${crew.name} now. ${other.name} will see you as a rival. Give their corner space unless you want trouble.`;
+      choices = [{ id: "dismiss", label: "Let's go." }, { id: "leave_crew", label: "Actually, I'll stay neutral." }];
+    } else if (this.dialogueNode === "left") {
+      text = "Sharp. We leave it here. You can walk through without picking sides.";
+      choices = [{ id: "dismiss", label: "Keep it peaceful." }];
+    } else if (this.affiliation === crew.id) {
+      text = crew.id === "downberg_side"
+        ? "Howzit, bru. Same side. Mind the cars coming up Downberg Road. The other crew won't be pleased to see our colours."
+        : "Awe, Danie's people. Don't block the gate — people must get to their flats. Keep an eye out for the other crew.";
+      choices = [{ id: "life", label: "What's happening today?" },
+        { id: "leave_crew", label: "I'm leaving the crew. Let's keep it peaceful." }, { id: "dismiss", label: "Catch you later." }];
+    } else if (this.affiliation) {
+      text = "Hey, bru. You're with the other side. Move along before this gets worse. Leave that crew if you want to keep this peaceful.";
+      choices = [{ id: "leave_crew", label: "I'm leaving the crew. No trouble." }, { id: "dismiss", label: "I'm moving on." }];
+    } else {
+      text = crew.id === "downberg_side"
+        ? `Howzit, bru. We're ${crew.name}. Mind the cars coming up the road. You can pass through, or run with us — but ${other.name} will treat you as a rival.`
+        : `Awe. We're ${crew.name}. Don't block the gate — people must get to their flats. Walk with us if you want, but ${other.name} will see you as a rival.`;
+      choices = [{ id: "join_crew", label: `Run with ${crew.name}.` },
+        { id: "life", label: "What's happening around here?" }, { id: "dismiss", label: "Just passing. I'll stay neutral." }];
+    }
+    if (this.dialogueNode === "life") {
+      text = crew.id === "downberg_side"
+        ? "Clay's looking for a football later. Right now we're just chatting while the neighbours bring in their washing. If you're choosing a side, know what comes with it."
+        : "Just a bit of music and a chat. The flats don't belong to us; everyone needs to get home. Leave space for the neighbours.";
+      choices = [{ id: "back", label: "Alright. About the crew..." }, { id: "dismiss", label: "Enjoy your afternoon." }];
+    }
+    this.conversation = { speaker: `${entity.name} ‘${entity.nickname}’ · ${crew.name}`, text, choices };
+    return this.conversation;
+  }
+
+  private chooseCrew(choiceId: string): Conversation | null {
+    if (!this.conversation?.choices.some((choice) => choice.id === choiceId)) return this.conversation;
+    if (choiceId === "dismiss") { this.close(); return null; }
+    if (choiceId === "join_crew") {
+      this.affiliation = this.active!.crewId!; this.phase = "joined";
+      this.rivalCrew = null; this.phaseTime = 0; this.lostSightTime = 0;
+      this.dialogueNode = "joined";
+    } else if (choiceId === "leave_crew") {
+      this.leaveCrew(); this.dialogueNode = "left";
+    } else this.dialogueNode = choiceId === "back" ? "start" : "life";
+    return this.showCrew();
+  }
+
+  private updateCrewState(dt: number, player: MapPoint) {
+    this.cooldown = Math.max(0, this.cooldown - dt);
+    if (!this.affiliation) { this.phase = "neutral"; return; }
+    if (this.phase === "caught" || this.phase === "escaped") {
+      this.phaseTime = Math.max(0, this.phaseTime - dt);
+      if (this.phaseTime === 0) { this.phase = "joined"; this.rivalCrew = null; }
+      return;
+    }
+    if (this.phase === "joined") {
+      if (this.cooldown > 0) return;
+      const rival = this.actors.find((entity) => entity.crewId && entity.crewId !== this.affiliation &&
+        Math.hypot(entity.position.x - player.x, entity.position.y - player.y) <= WARNING_RANGE && this.clearLine(player, entity.position));
+      if (rival) { this.rivalCrew = rival.crewId!; this.phase = "warning"; this.phaseTime = WARNING_GRACE; }
+      return;
+    }
+    const rivals = this.actors.filter((entity) => entity.crewId === this.rivalCrew);
+    const distance = (entity: NpcEntity) => Math.hypot(entity.position.x - player.x, entity.position.y - player.y);
+    if (this.phase === "warning") {
+      if (!rivals.some((entity) => distance(entity) <= 18 * PIXELS_PER_METRE && this.clearLine(player, entity.position))) {
+        this.phase = "joined"; this.rivalCrew = null; this.phaseTime = 0; return;
+      }
+      this.phaseTime = Math.max(0, this.phaseTime - dt);
+      if (this.phaseTime === 0) {
+        this.phase = "pursuit"; this.phaseTime = MAX_PURSUIT; this.lostSightTime = 0;
+        for (const entity of rivals) { const movement = this.crewMovement.get(entity.id)!; movement.path = []; movement.replan = 0; }
+      }
+      return;
+    }
+    if (this.phase === "pursuit") {
+      if (rivals.some((entity) => distance(entity) <= 1.2 * PIXELS_PER_METRE && this.clearLine(player, entity.position))) {
+        this.finishPursuit("caught"); return;
+      }
+      const nearest = Math.min(...rivals.map(distance));
+      const visible = rivals.some((entity) => this.clearLine(player, entity.position));
+      this.lostSightTime = !visible && nearest > 8 * PIXELS_PER_METRE ? this.lostSightTime + dt : 0;
+      this.phaseTime = Math.max(0, this.phaseTime - dt);
+      if (nearest > 25 * PIXELS_PER_METRE || this.lostSightTime >= 6 || this.phaseTime === 0) this.finishPursuit("escaped");
+    }
+  }
+
+  private finishPursuit(result: "escaped" | "caught") {
+    this.phase = result; this.phaseTime = 6; this.cooldown = 15;
+    for (const movement of this.crewMovement.values()) { movement.path = []; movement.replan = 0; movement.target = null; }
+  }
+
+  private moveCrew(entity: NpcEntity, dt: number, player: MapPoint) {
+    const movement = this.crewMovement.get(entity.id)!;
+    const pursuing = this.phase === "pursuit" && entity.crewId === this.rivalCrew;
+    const target = pursuing ? player : movement.home;
+    const distance = Math.hypot(entity.position.x - target.x, entity.position.y - target.y);
+    if (distance <= (pursuing ? 1.1 * PIXELS_PER_METRE : 0.8)) {
+      movement.path = [];
+      if (Math.hypot(entity.position.x - player.x, entity.position.y - player.y) < WARNING_RANGE)
+        entity.heading = Math.atan2(player.x - entity.position.x, -(player.y - entity.position.y));
+      return false;
+    }
+    movement.replan = Math.max(0, movement.replan - dt);
+    if (this.clearLine(entity.position, target, BODY_RADIUS + 0.3)) movement.path = [{ ...target }];
+    else if (movement.replan === 0 || !movement.target || Math.hypot(target.x - movement.target.x, target.y - movement.target.y) > 2 * PIXELS_PER_METRE) {
+      movement.path = this.navigation.route(entity.position, target);
+      movement.target = { ...target }; movement.replan = 0.85;
+    }
+    while (movement.path.length && Math.hypot(entity.position.x - movement.path[0].x, entity.position.y - movement.path[0].y) < 1.2) movement.path.shift();
+    const destination = movement.path[0];
+    if (!destination) return false;
+    const dx = destination.x - entity.position.x, dy = destination.y - entity.position.y;
+    const length = Math.hypot(dx, dy);
+    const travel = Math.min(length, (pursuing ? 4.8 : 1.5) * PIXELS_PER_METRE * dt);
+    const steps = Math.max(1, Math.ceil(travel / (BODY_RADIUS / 2)));
+    const old = { ...entity.position };
+    for (let step = 0; step < steps; step++) {
+      const mx = dx / length * travel / steps, my = dy / length * travel / steps;
+      const next = { x: entity.position.x + mx, y: entity.position.y + my };
+      if (this.actors.some((other) => other !== entity && Math.hypot(other.position.x - next.x, other.position.y - next.y) < BODY_RADIUS * 2.2)) break;
+      if (!pursuing && Math.hypot(player.x - next.x, player.y - next.y) < 1.1 * PIXELS_PER_METRE) break;
+      this.moveStep(entity.position, mx, my);
+    }
+    const mx = entity.position.x - old.x, my = entity.position.y - old.y;
+    const moving = Math.hypot(mx, my) > 0.001;
+    if (moving) entity.heading = Math.atan2(mx, -my);
+    return moving;
+  }
+
+  private moveStep(position: MapPoint, dx: number, dy: number) {
+    const next = { x: position.x + dx, y: position.y + dy };
+    if (this.trafficCollision?.blocked(next.x, next.y, BODY_RADIUS)) return;
+    const previous = { ...position };
+    this.collision.move(position, dx, dy, BODY_RADIUS);
+    this.clamp(position);
+    if (this.trafficCollision?.blocked(position.x, position.y, BODY_RADIUS)) Object.assign(position, previous);
   }
 
   private walk(entity: NpcEntity, patrol: Patrol, dt: number, player: MapPoint) {
@@ -339,8 +562,7 @@ export class NeighbourhoodNpcs {
       const next = { x: entity.position.x + dx / distance * travel / steps, y: entity.position.y + dy / distance * travel / steps };
       const occupied = this.actors.some((other) => other !== entity && Math.hypot(other.position.x - next.x, other.position.y - next.y) < BODY_RADIUS * 2.2);
       if (occupied || Math.hypot(next.x - player.x, next.y - player.y) < BODY_RADIUS * 2.2) break;
-      this.collision.move(entity.position, dx / distance * travel / steps, dy / distance * travel / steps, BODY_RADIUS);
-      this.clamp(entity.position);
+      this.moveStep(entity.position, dx / distance * travel / steps, dy / distance * travel / steps);
     }
     const movedX = entity.position.x - old.x, movedY = entity.position.y - old.y;
     const moving = Math.hypot(movedX, movedY) > 0.001;
@@ -408,9 +630,79 @@ export class NeighbourhoodNpcs {
     return available[0];
   }
 
+  private outsideTrafficLanes(point: MapPoint) {
+    return motorSegments.every(({ road, a, b }) => {
+      const nearest = projection(point, a, b);
+      return Math.hypot(point.x - nearest.x, point.y - nearest.y) >= road.width / 2 + PIXELS_PER_METRE;
+    });
+  }
+
+  private crewCandidates(candidates: Placement[]): Placement[] {
+    // At a junction, being beside one road can still mean standing in another.
+    // Shift onto the outer pavement and require clearance from every motor road.
+    const result: Placement[] = [];
+    for (const candidate of candidates) {
+      const projections = candidate.road.points.slice(1).map((b, index) => projection(candidate.position, candidate.road.points[index], b));
+      projections.sort((a, b) => Math.hypot(a.x - candidate.position.x, a.y - candidate.position.y) -
+        Math.hypot(b.x - candidate.position.x, b.y - candidate.position.y));
+      const nearest = projections[0];
+      const dx = candidate.position.x - nearest.x, dy = candidate.position.y - nearest.y, distance = Math.hypot(dx, dy);
+      if (distance < 1) continue;
+      const shift = Math.max(0, candidate.road.width / 2 + 1.4 * PIXELS_PER_METRE - distance);
+      const mx = dx / distance * shift, my = dy / distance * shift;
+      const position = { x: candidate.position.x + mx, y: candidate.position.y + my };
+      if (!this.clear(position, BODY_RADIUS + 1) || this.fieldCollision.blocked(position.x, position.y, BODY_RADIUS + 1) || !this.outsideTrafficLanes(position)) continue;
+      result.push({ ...candidate, position, route: candidate.route.map((point) => ({ x: point.x + mx, y: point.y + my })) });
+    }
+    return result;
+  }
+
+  private selectCrewGroup(candidates: Placement[], anchor: MapPoint): Placement[] {
+    const available = candidates.filter((candidate) => this.actors.every((entity) =>
+      Math.hypot(entity.position.x - candidate.position.x, entity.position.y - candidate.position.y) >= 4.5 * PIXELS_PER_METRE));
+    available.sort((a, b) => Math.hypot(a.position.x - anchor.x, a.position.y - anchor.y) - Math.hypot(b.position.x - anchor.x, b.position.y - anchor.y));
+    for (const centre of available) {
+      const first = this.crewPlacement(centre, 1, [centre.position]);
+      if (!first) continue;
+      const second = this.crewPlacement(centre, 2, [centre.position, first.position]);
+      if (second) return [centre, first, second];
+    }
+    throw new Error("No clear outer pavement for this fictional crew's corner.");
+  }
+
+  private crewPlacement(centre: Placement, index: number, reserved: MapPoint[]): Placement | null {
+    const [a, b] = centre.route;
+    const dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);
+    if (length > 0) {
+      const side = index === 1 ? -1 : 1;
+      for (const metres of [4, 5, 6, 7, 8]) {
+        const position = { x: centre.position.x + dx / length * metres * PIXELS_PER_METRE * side,
+          y: centre.position.y + dy / length * metres * PIXELS_PER_METRE * side };
+        if (this.clear(position, BODY_RADIUS + 1) && !this.fieldCollision.blocked(position.x, position.y, BODY_RADIUS + 1) &&
+          this.outsideTrafficLanes(position) && this.clearLine(centre.position, position, BODY_RADIUS + 0.8) &&
+          reserved.every((point) => Math.hypot(point.x - position.x, point.y - position.y) >= 2 * PIXELS_PER_METRE) &&
+          this.actors.every((entity) => Math.hypot(entity.position.x - position.x, entity.position.y - position.y) >= 2 * PIXELS_PER_METRE))
+          return { ...centre, position };
+      }
+    }
+    return null;
+  }
+
   private welcomePlacement(candidates: Placement[]): Placement {
     const nearby = [...candidates].sort((a, b) => Math.hypot(a.position.x - SPAWN.x, a.position.y - SPAWN.y) - Math.hypot(b.position.x - SPAWN.x, b.position.y - SPAWN.y))[0];
     const offset = 1.85 * PIXELS_PER_METRE;
+    const downberg = motorSegments.filter(({ road }) => road.name === "Downberg Road").map((segment) => {
+      const nearest = projection(SPAWN, segment.a, segment.b);
+      return { ...segment, distance: Math.hypot(SPAWN.x - nearest.x, SPAWN.y - nearest.y), length: Math.hypot(segment.b.x - segment.a.x, segment.b.y - segment.a.y) };
+    }).sort((a, b) => a.distance - b.distance || b.length - a.length)[0];
+    if (downberg?.length) {
+      const tx = (downberg.b.x - downberg.a.x) / downberg.length, ty = (downberg.b.y - downberg.a.y) / downberg.length;
+      for (const side of [1, -1]) {
+        const position = { x: SPAWN.x + tx * offset * side, y: SPAWN.y + ty * offset * side };
+        if (this.clear(position, BODY_RADIUS + 1) && this.clearLine(SPAWN, position))
+          return { ...nearby, position, route: [position, position], heading: Math.atan2(SPAWN.x - position.x, -(SPAWN.y - position.y)) };
+      }
+    }
     for (const angle of [Math.PI * 0.7, Math.PI * 0.3, 0, Math.PI, -Math.PI / 2]) {
       const position = { x: SPAWN.x + Math.cos(angle) * offset, y: SPAWN.y + Math.sin(angle) * offset };
       if (this.clear(position, BODY_RADIUS + 1) && this.clearLine(SPAWN, position)) return { ...nearby, position, route: [position, position], heading: Math.atan2(SPAWN.x - position.x, -(SPAWN.y - position.y)) };

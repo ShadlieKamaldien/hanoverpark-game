@@ -5,6 +5,14 @@ export interface Conversation {
   text: string;
   choices: { id: string; label: string }[];
 }
+export interface CrewStatus {
+  affiliation: string | null;
+  phase: string;
+  crewName?: string;
+  text: string;
+  remaining?: number;
+  chasingIds: string[];
+}
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -34,6 +42,12 @@ export class PreviewInterface {
   private readonly hud = element<HTMLElement>("preview-hud");
   private readonly street = element<HTMLElement>("preview-street");
   private readonly position = element<HTMLElement>("preview-position");
+  private readonly crewPanel = element<HTMLElement>("preview-crew-status");
+  private readonly crewAffiliation = element<HTMLElement>("preview-crew-affiliation");
+  private readonly crewMessage = element<HTMLElement>("preview-crew-message");
+  private readonly crewTimer = element<HTMLElement>("preview-crew-timer");
+  private readonly crewHint = element<HTMLElement>("preview-crew-hint");
+  private readonly crewAnnouncement = element<HTMLElement>("preview-crew-announcement");
   private readonly resumeButton = element<HTMLButtonElement>("preview-resume-button");
   private readonly interactPrompt = element<HTMLElement>("preview-interact-prompt");
   private readonly interactButton = element<HTMLButtonElement>("preview-interact");
@@ -48,6 +62,7 @@ export class PreviewInterface {
   private readonly viewButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-view]"));
   private started = false;
   private paused = false;
+  private crewAnnouncementKey = "";
 
   constructor() {
     this.canvas.inert = true;
@@ -135,6 +150,27 @@ export class PreviewInterface {
     if (this.street.textContent !== street) this.street.textContent = street;
     if (position !== undefined && this.position.textContent !== position) {
       this.position.textContent = position;
+    }
+  }
+
+  crewStatus(state: CrewStatus, affiliationName?: string): void {
+    const affiliation = state.affiliation ? (affiliationName?.trim() || state.affiliation) : "Neutral";
+    const phase = ["warning", "pursuit", "caught", "escaped"].includes(state.phase) ? state.phase : "normal";
+    this.crewPanel.dataset.phase = phase;
+    this.crewPanel.dataset.affiliation = state.affiliation ?? "neutral";
+    if (this.crewAffiliation.textContent !== affiliation) this.crewAffiliation.textContent = affiliation;
+    if (this.crewMessage.textContent !== state.text) this.crewMessage.textContent = state.text;
+    this.crewHint.hidden = state.phase !== "warning" && state.phase !== "pursuit";
+    const hasTimer = Number.isFinite(state.remaining) && (state.remaining ?? 0) > 0 && phase !== "normal";
+    this.crewTimer.hidden = !hasTimer;
+    const timer = hasTimer ? `${Math.ceil(state.remaining!)}s` : "";
+    if (this.crewTimer.textContent !== timer) this.crewTimer.textContent = timer;
+
+    // Announce changed encounters once; the visible countdown stays quiet.
+    const key = JSON.stringify([state.affiliation, state.phase, state.crewName, state.text]);
+    if (key !== this.crewAnnouncementKey) {
+      this.crewAnnouncementKey = key;
+      this.crewAnnouncement.textContent = `${affiliation}. ${state.text}`;
     }
   }
 

@@ -23,6 +23,13 @@
             <h2 id="preview-street" aria-live="polite">Downberg Road</h2>
             <span id="preview-position" aria-hidden="true">Hanover Park · Cape Town</span>
           </section>
+          <section id="preview-crew-status" class="preview-crew-status" data-phase="normal" aria-label="Crew status">
+            <div class="preview-crew-heading"><span class="preview-eyebrow">YOUR CREW</span><span id="preview-crew-timer" aria-hidden="true" hidden></span></div>
+            <h2 id="preview-crew-affiliation">Neutral</h2>
+            <p id="preview-crew-message">Speak to a crew contact to choose a side.</p>
+            <p id="preview-crew-hint" class="preview-crew-hint" hidden><b>SHIFT</b> Sprint away</p>
+            <span id="preview-crew-announcement" class="preview-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></span>
+          </section>
           <div class="preview-actions">
             <fieldset class="preview-lighting preview-views">
               <legend>VIEW</legend>
@@ -54,13 +61,13 @@
           <div class="preview-menu">
             <span class="preview-eyebrow">3D PREVIEW · DOWNBERG ROAD</span>
             <h1 id="preview-start-title">THE FLATS.<br /><span>ANOTHER ANGLE.</span></h1>
-            <p class="preview-intro">Take a walk through the mapped streets. Explore the flats and courtyards around Downberg Road, greet the neighbours, then pull back for a view of the neighbourhood.</p>
+            <p class="preview-intro">Take a walk through the mapped streets. Explore the flats and courtyards around Downberg Road, greet the neighbours and keep an eye on the passing cars.</p>
             <p id="preview-loading" class="preview-loading" role="status">Getting the neighbourhood ready…</p>
             <button id="preview-start-button" class="preview-primary" type="button" disabled>ENTER 3D PREVIEW <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
             <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint · <b>E</b> Greet / speak<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom · <b>ESC</b> Pause</p>
             <p class="preview-keyboard-note">Keyboard and mouse needed for this preview.</p>
-            <p class="preview-source-note">Real mapped streets. Original architecture and characters.<br />Walk and talk here; missions are in the 2D game.</p>
+            <p class="preview-source-note">Real mapped streets. Original architecture, characters and fictional crews.<br />Watch traffic. Talk to crew contacts to join or stay neutral.</p>
           </div>
           <div class="preview-postcard" aria-hidden="true"><span>CAPE TOWN, SOUTH AFRICA</span><b>DOWNBERG ROAD<br />HANOVER PARK</b><small>33°59′ S · 18°31′ E</small></div>
           <a class="preview-start-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
@@ -69,7 +76,7 @@
           <div class="preview-menu preview-compact-menu">
             <span class="preview-eyebrow">TAKE A MOMENT</span>
             <h1 id="preview-pause-title">PAUSED.</h1>
-            <p class="preview-intro">Your walk will continue where you left off.</p>
+            <p class="preview-intro">The street is waiting. Traffic and crew pursuits pause with you.</p>
             <button id="preview-resume-button" class="preview-primary" type="button">CONTINUE EXPLORING <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
             <p class="preview-source-note">WASD / arrows to walk · Shift to sprint · E to greet / speak<br />Drag to orbit · Wheel to zoom · Esc to resume</p>

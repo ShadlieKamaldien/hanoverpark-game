@@ -4,7 +4,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Collision } from "../game/systems/collision";
+import { Collision, type Polygon } from "../game/systems/collision";
 import { BUILDINGS, PREVIEW, SPAWN, toWorld } from "./map";
 import { PROPERTY_SOLIDS } from "./properties";
 
@@ -29,11 +29,25 @@ export class PreviewPlayer {
   );
   private gait = 0;
   private idleTime = 0;
+  private trafficCollision = new Collision([]);
+  private readonly shirt: StandardMaterial;
+  private shirtColour = "#dda93c";
+
+  setTrafficSolids(polygons: Polygon[]) {
+    this.trafficCollision = new Collision([], polygons);
+  }
+
+  setCrewColour(colour: string | null) {
+    const next = colour ?? "#dda93c";
+    if (next === this.shirtColour) return;
+    this.shirtColour = next;
+    this.shirt.diffuseColor.copyFrom(Color3.FromHexString(next));
+  }
 
   constructor(scene: Scene) {
     this.mesh = new TransformNode("preview-player", scene);
     const skin = this.material(scene, "skin", "#9b6449");
-    const shirt = this.material(scene, "shirt", "#dda93c");
+    const shirt = this.shirt = this.material(scene, "shirt", "#dda93c");
     const trousers = this.material(scene, "trousers", "#283741");
     const shoes = this.material(scene, "shoes", "#1c242a");
     const hair = this.material(scene, "hair", "#241d1a");
@@ -110,7 +124,12 @@ export class PreviewPlayer {
       // Smaller than the body radius: even a thin source polygon cannot be skipped.
       const steps = Math.max(1, Math.ceil(distance / (BODY_RADIUS / 2)));
       for (let i = 0; i < steps; i++) {
-        this.collision.move(this.position, dx / steps, dy / steps, BODY_RADIUS);
+        const oldX = this.position.x;
+        this.collision.move(this.position, dx / steps, 0, BODY_RADIUS);
+        if (this.trafficCollision.blocked(this.position.x, this.position.y, BODY_RADIUS)) this.position.x = oldX;
+        const oldY = this.position.y;
+        this.collision.move(this.position, 0, dy / steps, BODY_RADIUS);
+        if (this.trafficCollision.blocked(this.position.x, this.position.y, BODY_RADIUS)) this.position.y = oldY;
         this.clampToPreview();
       }
     }

@@ -21,6 +21,8 @@ import { buildScenery } from "./scenery";
 import { PreviewSky } from "./atmosphere";
 import { buildProperties } from "./propertiesWorld";
 import { buildMappedWallArt } from "./wallArt";
+import { Traffic } from "./traffic";
+import { CREWS } from "./crews";
 
 const ui = new PreviewInterface();
 
@@ -39,6 +41,7 @@ function startPreview() {
   const sky = new PreviewSky(scene);
   const player = new PreviewPlayer(scene);
   const npcs = new NeighbourhoodNpcs(scene);
+  const traffic = new Traffic(scene);
   const target = () => player.mesh.position.add(new Vector3(0, 1.1, 0));
   const views = { street: { beta: 1.18, radius: 18 }, overview: { beta: 0.72, radius: 48 } };
   let viewPreset: ViewPreset = "street";
@@ -54,7 +57,7 @@ function startPreview() {
   camera.inputs.removeByType("ArcRotateCameraKeyboardMoveInput");
   const ambient = new HemisphericLight("sky-fill", Vector3.Up(), scene);
   const characterFill = new HemisphericLight("character-sky-fill", Vector3.Up(), scene);
-  characterFill.includedOnlyMeshes = [...player.shadowCasters, ...npcs.shadowCasters];
+  characterFill.includedOnlyMeshes = [...player.shadowCasters, ...npcs.shadowCasters, ...traffic.shadowCasters];
   characterFill.renderPriority = 1;
   characterFill.diffuse = new Color3(0.82, 0.9, 1);
   characterFill.groundColor = new Color3(0.26, 0.31, 0.35);
@@ -68,7 +71,7 @@ function startPreview() {
   shadows.filteringQuality = ShadowGenerator.QUALITY_LOW;
   shadows.bias = 0.003;
   shadows.normalBias = 0.02;
-  for (const mesh of [...world.shadowCasters, ...properties.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters]) shadows.addShadowCaster(mesh);
+  for (const mesh of [...world.shadowCasters, ...properties.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters, ...traffic.shadowCasters]) shadows.addShadowCaster(mesh);
   // The merged body gives each neighbour a silhouette without five shadow draws.
   for (const entity of npcs.actors) shadows.addShadowCaster(entity.actor.shadowCasters[0]);
   // An explicit shadow render list otherwise submits off-screen buildings too.
@@ -110,6 +113,7 @@ function startPreview() {
       light.intensity = 3.2;
     }
     sky.setLighting(preset);
+    traffic.setLighting(preset);
     ui.setLighting(preset);
   };
   lightScene("sunset");
@@ -139,6 +143,11 @@ function startPreview() {
     const p = player.position, geo = gameCoordinates(p.x, p.y);
     ui.status(closestStreet(p), `${geo.latitude.toFixed(6)}°, ${geo.longitude.toFixed(6)}°`);
     context.drawImage(background, 0, 0);
+    context.fillStyle = "#d1d4c7";
+    for (const vehicle of traffic.vehicles) {
+      const vx = ox + (vehicle.position.x - bounds.minX) * scale, vy = oy + (vehicle.position.y - bounds.minY) * scale;
+      context.fillRect(vx - 1.3, vy - 1.3, 2.6, 2.6);
+    }
     context.fillStyle = "#89c7bc";
     for (const entity of npcs.actors) {
       const nx = ox + (entity.position.x - bounds.minX) * scale, ny = oy + (entity.position.y - bounds.minY) * scale;
@@ -147,6 +156,10 @@ function startPreview() {
     const x = ox + (p.x - bounds.minX) * scale, y = oy + (p.y - bounds.minY) * scale;
     context.fillStyle = "#edbd59"; context.strokeStyle = "#172e26"; context.lineWidth = 2;
     context.beginPath(); context.arc(x, y, 4, 0, Math.PI * 2); context.fill(); context.stroke();
+    const crewState = npcs.crewState;
+    const crew = CREWS.find((entry) => entry.id === crewState.affiliation);
+    player.setCrewColour(crew?.colour ?? null);
+    ui.crewStatus(crewState, crew?.name);
   };
 
   const keys = new Set<string>();
@@ -240,6 +253,9 @@ function startPreview() {
     if (disposed || failed) return;
     try {
       const dt = Math.min(engine.getDeltaTime() / 1000, 0.1);
+      traffic.update(dt, player.position, npcs.actors.map((entity) => entity.position), !started || paused || ui.dialogueOpen);
+      player.setTrafficSolids(traffic.solids);
+      npcs.setTrafficSolids(traffic.solids);
       if (started && !paused) {
         if (!ui.dialogueOpen) player.update(dt, keys, camera.getForwardRay().direction);
         camera.setTarget(Vector3.Lerp(camera.target, target(), Math.min(1, dt * 12)), false, false, true);
@@ -261,7 +277,7 @@ function startPreview() {
     } catch (error) { fail(error); }
   });
   if (import.meta.env.DEV) {
-    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
+    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, traffic, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
   }
   const pagehide = (event: PageTransitionEvent) => {
     if (event.persisted) blur();
@@ -277,7 +293,7 @@ function startPreview() {
     window.removeEventListener("resize", resize);
     document.removeEventListener("visibilitychange", visibility);
     window.removeEventListener("pagehide", pagehide);
-    npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
+    traffic.dispose(); npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
   };
   window.addEventListener("pagehide", pagehide);
   if (import.meta.hot) import.meta.hot.dispose(dispose);
