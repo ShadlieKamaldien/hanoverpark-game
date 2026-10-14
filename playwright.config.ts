@@ -27,5 +27,5 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
   ],
-  reporter: "list",
+  reporter: process.env.GITHUB_ACTIONS ? [["list"], ["github"]] : "list",
 });
