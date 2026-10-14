@@ -64,10 +64,19 @@ The five browser tests exercise keyboard movement and sprinting, building collis
 
 ## Static hosting / Azure
 
-Vite builds to `dist/`; `public/staticwebapp.config.json` is copied into that output. For Azure Static Web Apps use app location `/`, no API location, output location `dist`, and build command `npm run build`. No deployment has been performed. The GitHub Actions workflow installs locked dependencies, checks TypeScript, builds and runs the browser tests; it does not deploy anything.
+Vite builds to `dist/`; `public/staticwebapp.config.json` is copied into that output. For Azure Static Web Apps use app location `/`, no API location, output location `dist`, and build command `npm run build`. The build-validation workflow installs locked dependencies, checks TypeScript, builds and runs browser tests. A separate manually triggered deployment workflow uploads the static output to Azure; it does not create Azure resources. Deployment requires the Azure resource and secure repository secret described below.
 
 ## Prototype scope
 
 Includes a 2400×1800 scrolling neighbourhood, flats with balconies/washing lines/stairs, corner shop and takeaway, taxi rank, parked vehicles, pitch, trees, streetlights, fences, wandering pedestrians, three named NPCs, one driveable car, one complete mission, menus, HUD, minimap and a gradual lighting cycle.
 
 Not included: interiors, combat, ambient moving traffic, recorded music/audio, additional missions or vehicles, touch/mobile controls, exact street geography, multiplayer or paid AI dialogue. Health is tracked and saved; this peaceful prototype has no combat/damage system. Desktop keyboard play is the intended workflow. Phaser is a substantial dependency and Vite reports a bundle-size advisory; the production build succeeds.
+
+## Deploy a new Azure Free Static Web App
+
+1. Sign in to the Azure portal and create a **Static Web App**. Suggested name: `hanoverpark-streets`; pricing plan: **Free**; resource group: `hanoverpark-game-rg`; choose an available region such as **West Europe**. Select **Other** as the deployment source so Azure does not create a competing workflow. An Azure subscription is required, even for the Free plan.
+2. Open the new resource's **Manage deployment token** action and copy its token directly into the GitHub repository's **Settings → Secrets and variables → Actions → New repository secret**, named `AZURE_STATIC_WEB_APPS_API_TOKEN`. Never commit this token or paste it into chat.
+3. In GitHub **Actions → Deploy game to Azure → Run workflow**, select `feat/playable-neighbourhood` and run the workflow. It installs the lockfile, typechecks/builds with Node 24, and uploads `dist/` as the production static site. The GitHub job summary reports the Azure game URL.
+4. Open the Azure URL, start the game, complete the delivery and refresh to verify persistence on that origin. Local development saves do not transfer to the Azure URL.
+
+The workflow is manual: ordinary source pushes run build validation and do not redeploy production. Selecting a branch in this deployment workflow publishes that selected branch to production. No database, Functions API, paid SKU or other service is configured.
