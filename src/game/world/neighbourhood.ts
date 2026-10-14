@@ -1,6 +1,9 @@
 import Phaser from "phaser";
 import type { Rect } from "../systems/collision";
 import { MAP } from "./mapData";
+import { buildingColor, drawMappedBuilding } from "./buildings";
+import { drawStreetSurfaces } from "./surfaces";
+import type { WindowGlow } from "./visualTypes";
 
 type Point = { x: number; y: number };
 type Graphics = Phaser.GameObjects.Graphics;
@@ -13,15 +16,7 @@ const PALETTE = {
   kerb: 0x949686,
   asphalt: 0x626e6a,
   grass: 0x929e78,
-  roof: [0xa6a697, 0x999b8d, 0xb4b19d, 0x9a9688],
 };
-
-function buildingColor(b: MappedBuilding, index: number) {
-  if (/school/.test(b.kind)) return 0xb5b8a2;
-  if (/retail|shop|commercial|mall/.test(b.kind)) return 0xa59b83;
-  if (/church|worship/.test(b.kind)) return 0xbcb5a0;
-  return PALETTE.roof[index % PALETTE.roof.length];
-}
 
 // Bounds remain available to the minimap. Runtime collision uses the original
 // polygons in mapData rather than boxes spanning rotated flats or courtyards.
@@ -312,126 +307,6 @@ function drawRoads(scene: Phaser.Scene, g: Graphics) {
   }
 }
 
-function drawBuilding(scene: Phaser.Scene, ground: Graphics, building: MappedBuilding, index: number) {
-  const points = closedPoints(building.points);
-  if (points.length < 3) return;
-  const flats = /apartments|residential/.test(building.kind) || /court|hof/i.test(building.name ?? "");
-  const commercial = /retail|shop|commercial|mall/.test(building.kind);
-  const color = buildingColor(building, index);
-  ground.fillStyle(0x35473e, 0.22);
-  fillFootprint(ground, building, 8, 11);
-  ground.fillStyle(color);
-  fillFootprint(ground, building);
-  ground.lineStyle(3, 0x6f7568);
-  for (const ring of [points, ...(building.holes ?? [])]) {
-    strokeLine(ground, [...ring, ring[0]]);
-  }
-  let g = ground;
-  if (building.holes?.length) {
-    // Mask every roof/facade detail, including long ridges and windows, rather
-    // than painting over holes afterwards and losing real ground or paths.
-    const shape = scene.make.graphics({}, false).fillStyle(0xffffff);
-    fillFootprint(shape, building);
-    g = scene.add.graphics().setDepth(0).setMask(shape.createGeometryMask());
-    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      g.clearMask(true);
-      shape.destroy();
-    });
-  }
-  const area = points.reduce((sum, a, i) => {
-    const b = points[(i + 1) % points.length];
-    return sum + a.x * b.y - b.x * a.y;
-  }, 0);
-  const c = centre(points);
-  const edges = points.map((a, i) => {
-    const b = points[(i + 1) % points.length], length = Math.hypot(b.x - a.x, b.y - a.y);
-    const ux = length ? (b.x - a.x) / length : 0;
-    const uy = length ? (b.y - a.y) / length : 0;
-    return { a, b, length, ux, uy, nx: -uy * Math.sign(area), ny: ux * Math.sign(area) };
-  });
-  const longest = [...edges].sort((a, b) => b.length - a.length)[0];
-  if (longest && longest.length > 65) {
-    const { ux, uy, length } = longest;
-    const ridge = [{ x: c.x - ux * length * 0.38, y: c.y - uy * length * 0.38 },
-      { x: c.x + ux * length * 0.38, y: c.y + uy * length * 0.38 }];
-    if (ridge.every((p) => inside(p, points))) {
-      g.lineStyle(3, 0xd1cbb2, 0.8);
-      strokeLine(g, ridge);
-      g.lineStyle(1, 0x646f64, 0.35);
-      for (let d = -length * 0.38; d < length * 0.38; d += 12) {
-        const p = { x: c.x + ux * d, y: c.y + uy * d };
-        const a = { x: p.x - uy * 12, y: p.y + ux * 12 };
-        const b = { x: p.x + uy * 12, y: p.y - ux * 12 };
-        if (inside(a, points) && inside(b, points)) strokeLine(g, [a, b]);
-      }
-    }
-  }
-  if (commercial) {
-    const bounds = building.bounds;
-    for (let y = bounds.y + 45; y < bounds.y + bounds.h - 30; y += 95) {
-      for (let x = bounds.x + 45; x < bounds.x + bounds.w - 30; x += 110) {
-        const corners = [{ x: x - 15, y: y - 10 }, { x: x + 15, y: y - 10 },
-          { x: x + 15, y: y + 10 }, { x: x - 15, y: y + 10 }];
-        if (!corners.every((p) => footprintContains(p, building))) continue;
-        g.fillStyle(0x687c78).fillRect(x - 17, y - 12, 34, 24);
-        g.fillStyle(0x93b0ac).fillRect(x - 14, y - 9, 28, 18);
-        g.fillStyle(0xc3d0ba).fillRect(x - 13, y - 9, 26, 3);
-        g.lineStyle(2, 0x677e77).lineBetween(x, y - 9, x, y + 9);
-      }
-    }
-  }
-  for (const edge of edges) {
-    if (edge.length < 25) continue;
-    const { a, b, nx, ny, ux, uy, length } = edge;
-    if (ny >= -0.12 && nx >= -0.12) {
-      g.lineStyle(2, 0xded4b8, 0.9).lineBetween(a.x, a.y, b.x, b.y);
-      continue;
-    }
-    // The visible south-facing wall stays within the mapped footprint.
-    const depth = flats ? 22 : 13;
-    g.fillStyle(flats ? (nx < -0.12 ? 0xb5aa91 : 0xc6b99c) : 0xb6b39c);
-    fillPolygon(g, [a, b, { x: b.x + nx * depth, y: b.y + ny * depth },
-      { x: a.x + nx * depth, y: a.y + ny * depth }]);
-    g.lineStyle(2, 0x6f7868).lineBetween(a.x, a.y, b.x, b.y);
-    const rows = flats ? [6, 15] : [6];
-    for (let d = 18; d < length - 10; d += 34) {
-      for (const inset of rows) {
-        const p = { x: a.x + ux * d + nx * inset, y: a.y + uy * d + ny * inset };
-        g.lineStyle(5, 0x435e5f).lineBetween(p.x, p.y, p.x + ux * 13, p.y + uy * 13);
-        g.lineStyle(1, 0xe4d9ba).lineBetween(
-          p.x + ux * 6, p.y + uy * 6,
-          p.x + ux * 6 + nx * 4, p.y + uy * 6 + ny * 4,
-        );
-      }
-      if (flats && Math.floor(d / 34) % 3 === 1) {
-        const p = { x: a.x + ux * (d + 15) + nx * 8, y: a.y + uy * (d + 15) + ny * 8 };
-        g.lineStyle(5, [0xb96b59, 0xd8c08c, 0x809f9a][index % 3])
-          .lineBetween(p.x, p.y, p.x + ux * 6, p.y + uy * 6);
-      }
-    }
-    const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    if (commercial && length > 110) {
-      g.lineStyle(10, 0x537c6c).lineBetween(
-        middle.x - ux * 37 + nx * 6, middle.y - uy * 37 + ny * 6,
-        middle.x + ux * 37 + nx * 6, middle.y + uy * 37 + ny * 6,
-      );
-      g.lineStyle(3, 0xe7dcba);
-      for (let d = -34; d < 35; d += 13) {
-        g.lineBetween(middle.x + ux * d + nx * 2, middle.y + uy * d + ny * 2,
-          middle.x + ux * d + nx * 10, middle.y + uy * d + ny * 10);
-      }
-    }
-    g.lineStyle(8, 0x3f554b).lineBetween(middle.x + nx * 3, middle.y + ny * 3,
-      middle.x + nx * 10, middle.y + ny * 10);
-  }
-  if (footprintContains(c, building)) {
-    g.fillStyle(0x69786a).fillRect(c.x - 7, c.y - 9, 12, 9);
-    g.fillStyle(0xbec1ab).fillRect(c.x - 9, c.y - 11, 12, 7);
-    g.lineStyle(1, 0x56685c).lineBetween(c.x + 15, c.y - 6, c.x + 15, c.y - 20);
-    g.lineBetween(c.x + 9, c.y - 16, c.x + 21, c.y - 16);
-  }
-}
-
 function drawTree(g: Graphics, p: Point, index: number) {
   const { x, y } = p;
   g.fillStyle(0x3f4d3a, 0.18).fillRect(x + 3, y - 9, 43, 34);
@@ -470,15 +345,22 @@ function drawScenery(scene: Phaser.Scene, g: Graphics, solids: Rect[]) {
   }
 }
 
-export function drawWorld(scene: Phaser.Scene): Rect[] {
+export interface WorldScenery {
+  solids: Rect[];
+  windows: WindowGlow[];
+}
+
+export function drawWorld(scene: Phaser.Scene): WorldScenery {
   const g = scene.add.graphics().setDepth(0);
   const solids: Rect[] = [];
+  const windows: WindowGlow[] = [];
   const names = new Set<string>();
   drawGround(g);
   drawFields(scene, g, names);
   drawRoads(scene, g);
+  drawStreetSurfaces(scene, g);
   for (const [index, b] of MAP.buildings.entries()) {
-    drawBuilding(scene, g, b, index);
+    windows.push(...drawMappedBuilding(scene, g, b, index));
     if (b.name && !names.has(b.name)) {
       label(scene, centre(b.points), b.name, "place");
       names.add(b.name);
@@ -496,5 +378,5 @@ export function drawWorld(scene: Phaser.Scene): Rect[] {
     }
   }
   drawScenery(scene, g, solids);
-  return solids;
+  return { solids, windows };
 }

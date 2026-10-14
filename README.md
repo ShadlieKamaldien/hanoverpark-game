@@ -64,7 +64,13 @@ Road widths are enlarged for gameplay. The boundary is community map data, not a
 
 ## Neighbourhood atmosphere
 
-Original council-flat artwork adds roof/façade depth, windows, balconies, laundry, surface wear and trees along the real source geometry. Original English/Afrikaans dialogue uses Cape Flats expressions such as “awe”, “hosh”, “my bru” and “sharp sharp”. It is fictional writing, not quoted residents' speech or a resident-approved performance.
+Original council-flat artwork now shows three storeys of recessed windows, varied curtains, balcony railings, plants, laundry, stairs, gates and weathered plaster. Roof seams, repairs, skylights and vents give other mapped buildings more surface detail. Architectural decoration is clipped to the source footprint, retaining open courtyards.
+
+Streets gain asphalt grain, tar repairs, cracks, paving joints, drains, sand and wear on the existing lane markings. These details follow the mapped road geometry and add no new obstacles. Sunset colours transition into cooler night lighting, with decorative streetlamps and staggered warm window glows; dawn returns to daylight. Lighting follows the fictional game clock, freezes on pause and covers the camera correctly after resize. It is artistic simulation rather than surveyed lamp inventory or astronomical sun timing.
+
+The game uses Phaser's Canvas renderer. Architectural detail is baked into small local texture tiles so it does not replay every façade stroke on every frame; no suburb-sized raster is allocated. Lighting uses one reusable small gradient texture and bounded light counts. Texture and resize listeners are cleaned up when the scene shuts down.
+
+Original English/Afrikaans dialogue uses Cape Flats expressions such as “awe”, “hosh”, “my bru” and “sharp sharp”. It is fictional writing, not quoted residents' speech or a resident-approved performance.
 
 Sound starts after Start/Continue and is generated locally with Web Audio: breeze, footsteps, an engine responding to the hatchback's speed, and distance-sensitive shop, story taxi-stop and Downberg pitch ambience. Mute and volume persist independently of game saves; audio stops on pause or loss of focus.
 
@@ -87,11 +93,11 @@ npm test
 
 Tests use `/usr/bin/chromium` when present; `CHROMIUM_PATH` can specify another compatible executable. Otherwise they use the downloaded Playwright browser. Cloud setup uses preinstalled Chromium.
 
-Eleven browser tests cover movement/sprint, rotated building collision, NPC conversations, mission/reward, save migration and refresh, pause/map, car handling, spatial audio output, mute/volume persistence, gameplay without Web Audio, optional R2 giving/refusal, robbery payment caps, keyboard escape, catches, and encounter pause/refresh persistence. Isolated interaction tests use a development-only positioning hook. A separate test walks the actual street route with keyboard input and no teleporting. Production-preview checks verify startup, keyboard movement, mission persistence, attribution and downloadable map data; the positioning hook is absent from production.
+Twelve browser tests cover movement/sprint, rotated building collision, NPC conversations, mission/reward, save migration and refresh, pause/map, car handling, spatial audio output, mute/volume persistence, gameplay without Web Audio, optional R2 giving/refusal, robbery payment caps, keyboard escape, catches, encounter pause/refresh persistence, and sunset/night/dawn lighting with pause and viewport resize. Isolated interaction tests use a development-only positioning hook. A separate test walks the actual street route with keyboard input and no teleporting. Production-preview checks verify startup, keyboard movement, mission persistence, attribution and downloadable map data; the positioning hook is absent from production.
 
 ## Structure and scope
 
-- `src/game/world/`: source geometry, locality registry, scenery and original sprites
+- `src/game/world/`: source geometry, locality registry, buildings, street surfaces, lighting and original sprites
 - `src/game/scenes/`: scene lifecycle and gameplay orchestration
 - `src/game/entities/`: walking, vehicle handling and fictional NPCs
 - `src/game/systems/`: polygon collision, spatial sound and validated saves

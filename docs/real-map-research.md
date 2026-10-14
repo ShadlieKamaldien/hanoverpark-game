@@ -146,3 +146,7 @@ Do not claim a complete, surveyed or exact present-day simulation. Keep mapped e
 ## Fictional street encounter update
 
 Four adult characters now use clear road-node positions for optional R2 requests and separate robbery attempts. Their appearance, tik-related dialogue, names and behaviour are original fiction. The OSM geometry only supplies walkable placement; it is not evidence about drug use or crime at any mapped business, court or street. There are no real-person claims, copied voices or named real shop staff.
+
+## Original visual scenery update
+
+Flat balconies, curtains, stairs, gates, roof repairs, street wear, drains and lamp positions are decorative simulation details. Architecture retains exact mapped outer/inner polygons, including courtyard holes; pavement detail follows existing centrelines. The new lighting uses a fictional game-clock sunset/night/dawn cycle and decorative lamps rather than an asserted municipal streetlight inventory or astronomical model. No additional building/name coordinates, source map data, business logos or third-party photography were introduced.

@@ -8,6 +8,7 @@ import { loadSave, saveProgress } from "../systems/save";
 import { DeliveryMission, DESTINATION } from "../missions/delivery";
 import { createArt } from "../world/art";
 import { drawWorld } from "../world/neighbourhood";
+import { DayLighting } from "../world/lighting";
 import { MAP, distanceToRoad, gameCoordinates } from "../world/mapData";
 import { Interface } from "../ui/interface";
 import { Ambience } from "../systems/ambience";
@@ -35,7 +36,7 @@ export class Neighbourhood extends Phaser.Scene {
   paused = false;
   keys!: Record<string, Phaser.Input.Keyboard.Key>;
   marker!: Phaser.GameObjects.Graphics;
-  light!: Phaser.GameObjects.Rectangle;
+  lighting!: DayLighting;
   residents: { sprite: Phaser.GameObjects.Sprite; x: number; y: number }[] = [];
   pedestrians: {
     sprite: Phaser.GameObjects.Sprite;
@@ -51,8 +52,9 @@ export class Neighbourhood extends Phaser.Scene {
   }
   create() {
     createArt(this);
+    const scenery = drawWorld(this);
     this.collision = new Collision(
-      drawWorld(this),
+      scenery.solids,
       MAP.buildings.map((b) => ({ points: b.points, holes: b.holes })),
     );
     this.encounters = new EncounterSystem(this.collision);
@@ -101,11 +103,7 @@ export class Neighbourhood extends Phaser.Scene {
       .setBounds(0, 0, WORLD.width, WORLD.height)
       .startFollow(this.player.sprite, true, 0.1, 0.1);
     this.cameras.main.setZoom(1.35);
-    this.light = this.add
-      .rectangle(0, 0, 10000, 10000, 0x162c50, 0)
-      .setOrigin(0)
-      .setScrollFactor(0)
-      .setDepth(90);
+    this.lighting = new DayLighting(this, scenery.windows);
     this.keys = this.input.keyboard!.addKeys(
       "W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,E,M,ESC",
     ) as Record<string, Phaser.Input.Keyboard.Key>;
@@ -498,8 +496,9 @@ export class Neighbourhood extends Phaser.Scene {
       }
     }
     this.worldTime += dt;
-    this.light.setAlpha((0.14 * (1 - Math.cos(this.worldTime / 90))) / 2);
-    const minute = (16 * 60 + 30 + Math.floor(this.worldTime / 3)) % (24 * 60);
+    const gameMinute = (16 * 60 + 30 + this.worldTime / 3) % (24 * 60);
+    this.lighting.update(gameMinute);
+    const minute = Math.floor(gameMinute);
     this.ui.text(
       "time",
       `${Math.floor(minute / 60)
