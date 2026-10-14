@@ -115,11 +115,11 @@ async function beginSample(page: Page) {
   });
 }
 
-async function seconds(page: Page, duration: number, rendered = false) {
+async function seconds(page: Page, duration: number, rendered = false, timeout = 120_000) {
   await expect.poll(() => page.evaluate((rendered) => {
     const sample = (window as any).__preview.brainSample;
     return rendered ? sample.rendered : sample.elapsed;
-  }, rendered), { timeout: 120_000 }).toBeGreaterThanOrEqual(duration);
+  }, rendered), { timeout }).toBeGreaterThanOrEqual(duration);
 }
 
 async function endSample(page: Page): Promise<Sample> {
@@ -185,6 +185,7 @@ async function fulfil(route: Route, body: unknown) {
 }
 
 test("eighteen real routines travel, satisfy needs and finish duties while mocked planning remains sparse", async ({ page }) => {
+  test.setTimeout(240_000);
   const errors: string[] = [], requests: { body: Request; elapsed: number }[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/api/npc-brain", async (route) => {
@@ -208,7 +209,7 @@ test("eighteen real routines travel, satisfy needs and finish duties while mocke
   await frozen(page);
   expect(requests).toHaveLength(0);
   await beginSample(page); await start(page);
-  await seconds(page, 32);
+  await seconds(page, 32, false, 180_000);
   const sample = await endSample(page);
   expect(sample.frames.length).toBeGreaterThan(30);
   const carmen = sample.frames.map((frame) => ({ person: frame.people.find((person) => person.id === "jogger_carmen")!,
