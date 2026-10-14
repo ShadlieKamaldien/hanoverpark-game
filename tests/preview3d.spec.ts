@@ -57,7 +57,7 @@ function courtyard() {
   return { centre, ring };
 }
 
-async function screenshotColours(page: Page, bytes: Buffer) {
+async function screenshotAppearance(page: Page, bytes: Buffer) {
   return page.evaluate(async (png) => {
     const image = new Image();
     image.src = `data:image/png;base64,${png}`;
@@ -68,14 +68,22 @@ async function screenshotColours(page: Page, bytes: Buffer) {
     context.drawImage(image, 0, 0);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
     const colours = new Set<string>();
-    // Inspect the open centre of the scene, avoiding the HUD and map overlay.
-    for (let y = Math.floor(canvas.height * 0.25); y < canvas.height * 0.75; y += 8) {
-      for (let x = Math.floor(canvas.width * 0.25); x < canvas.width * 0.75; x += 8) {
+    const luminance: number[] = [];
+    // Inspect the street and buildings below the horizon, excluding the HUD,
+    // controls and minimap. A colourful sky alone cannot pass this check.
+    for (let y = Math.floor(canvas.height * 0.5); y < canvas.height * 0.78; y += 8) {
+      for (let x = Math.floor(canvas.width * 0.2); x < canvas.width * 0.65; x += 8) {
         const i = (y * canvas.width + x) * 4;
         colours.add(`${pixels[i]},${pixels[i + 1]},${pixels[i + 2]}`);
+        luminance.push(pixels[i] * 0.2126 + pixels[i + 1] * 0.7152 + pixels[i + 2] * 0.0722);
       }
     }
-    return colours.size;
+    luminance.sort((a, b) => a - b);
+    return {
+      colours: colours.size,
+      medianLuminance: luminance[Math.floor(luminance.length / 2)],
+      brightLuminance: luminance[Math.floor(luminance.length * 0.9)],
+    };
   }, bytes.toString("base64"));
 }
 
@@ -101,17 +109,19 @@ test("production 3D preview renders WebGL, walks, changes lighting and preserves
   await hold(page, "d", 1_200);
   await expect(page.locator("#preview-position")).not.toHaveText(before);
 
-  await page.locator('[data-lighting="night"]').click();
-  await expect(page.locator('[data-lighting="night"]')).toHaveAttribute("aria-pressed", "true");
-  await page.waitForTimeout(350);
-  const night = await page.locator("#preview-canvas").screenshot({ path: testInfo.outputPath("downberg-night.png") });
-  expect(await screenshotColours(page, night)).toBeGreaterThan(50);
-  await page.locator('[data-lighting="day"]').click();
-  await expect(page.locator('[data-lighting="day"]')).toHaveAttribute("aria-pressed", "true");
-  await page.waitForTimeout(350);
-  const day = await page.locator("#preview-canvas").screenshot({ path: testInfo.outputPath("downberg-day.png") });
-  expect(await screenshotColours(page, day)).toBeGreaterThan(50);
-  expect(day.equals(night)).toBe(false);
+  const images: Buffer[] = [];
+  for (const preset of ["day", "sunset", "night"] as const) {
+    await page.locator(`[data-lighting="${preset}"]`).click();
+    await expect(page.locator(`[data-lighting="${preset}"]`)).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(350);
+    const image = await page.locator("#preview-canvas").screenshot({ path: testInfo.outputPath(`downberg-${preset}.png`) });
+    const appearance = await screenshotAppearance(page, image);
+    expect(appearance.colours, `${preset}: street detail is visible`).toBeGreaterThan(50);
+    expect(appearance.brightLuminance, `${preset}: the street remains readable`).toBeGreaterThan(30);
+    images.push(image);
+  }
+  expect(images[0].equals(images[1])).toBe(false);
+  expect(images[1].equals(images[2])).toBe(false);
   expect(await page.evaluate(() => localStorage.getItem("hanover-park-v1"))).toBe(originalSave);
   expect(errors).toEqual([]);
 });
@@ -128,6 +138,10 @@ test("3D walking and sprinting respect rotated walls and open courtyards, pause 
   const open = courtyard();
   await position(page, open.centre);
   const initial = await actor(page);
+  const initialOrbit = await page.evaluate(() => {
+    const camera = (window as any).__preview.camera;
+    return { alpha: camera.alpha, beta: camera.beta, radius: camera.radius };
+  });
   await hold(page, "d", 1_000);
   const walking = await actor(page);
   const walkDistance = walking.x - initial.x;
@@ -137,9 +151,9 @@ test("3D walking and sprinting respect rotated walls and open courtyards, pause 
     const camera = (window as any).__preview.camera;
     return { alpha: camera.alpha, beta: camera.beta, radius: camera.radius };
   });
-  expect(orbit.alpha).toBeCloseTo(-Math.PI / 2, 5);
-  expect(orbit.beta).toBeCloseTo(0.9, 5);
-  expect(orbit.radius).toBeCloseTo(34, 5);
+  expect(orbit.alpha).toBeCloseTo(initialOrbit.alpha, 5);
+  expect(orbit.beta).toBeCloseTo(initialOrbit.beta, 5);
+  expect(orbit.radius).toBeCloseTo(initialOrbit.radius, 5);
   await position(page, open.centre);
   await page.keyboard.down("Shift");
   await hold(page, "d", 1_000);
@@ -194,6 +208,77 @@ test("3D walking and sprinting respect rotated walls and open courtyards, pause 
   await page.keyboard.up("d");
   await hold(page, "d", 350);
   expect((await actor(page)).x).toBeGreaterThan(blurred.x + 3);
+  expect(errors).toEqual([]);
+});
+
+test("street and overview cameras remain usable after orbiting, recentering and resizing", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await enter(page);
+  const cameraState = () => page.evaluate(() => {
+    const preview = (window as any).__preview;
+    return {
+      alpha: preview.camera.alpha,
+      beta: preview.camera.beta,
+      radius: preview.camera.radius,
+      frame: preview.scene.getFrameId(),
+    };
+  });
+  await expect(page.locator('[data-view="street"]')).toHaveAttribute("aria-pressed", "true");
+  const street = await cameraState();
+  const initialPosition = await actor(page);
+  await page.locator('[data-view="overview"]').click();
+  await expect(page.locator('[data-view="overview"]')).toHaveAttribute("aria-pressed", "true");
+  const overview = await cameraState();
+  expect(overview.radius).toBeGreaterThan(street.radius * 1.5);
+  expect(overview.beta).toBeLessThan(street.beta);
+  expect(await actor(page)).toEqual(initialPosition);
+
+  const canvas = page.locator("#preview-canvas");
+  const bounds = (await canvas.boundingBox())!;
+  await page.mouse.move(bounds.x + bounds.width * 0.45, bounds.y + bounds.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.55, bounds.y + bounds.height * 0.45, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.abs((await cameraState()).alpha - overview.alpha)).toBeGreaterThan(0.03);
+  await page.locator("#preview-recenter").click();
+  await expect(page.locator('[data-view="overview"]')).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => Math.abs((await cameraState()).alpha - overview.alpha)).toBeLessThan(0.001);
+  const recentered = await cameraState();
+  expect(recentered.beta).toBeCloseTo(overview.beta, 5);
+  expect(recentered.radius).toBeCloseTo(overview.radius, 5);
+
+  await page.setViewportSize({ width: 800, height: 600 });
+  await expect(page.locator('[data-view="street"]')).toBeVisible();
+  await expect(page.locator('#preview-hud a[href="https://www.openstreetmap.org/copyright"]')).toBeVisible();
+  await expect.poll(async () => (await cameraState()).frame).toBeGreaterThan(recentered.frame);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const resizedBounds = (await canvas.boundingBox())!;
+  expect(resizedBounds.width).toBe(800);
+  await page.locator('[data-view="street"]').click();
+  await expect(page.locator('[data-view="street"]')).toHaveAttribute("aria-pressed", "true");
+  expect((await cameraState()).radius).toBeCloseTo(street.radius, 5);
+
+  // Independently chosen from the real rotated Blinkwater footprint: face the
+  // flats from outside their wall rather than capturing only the spawn road.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const facade = wall();
+  await position(page, facade.start);
+  await page.evaluate((alpha) => { (window as any).__preview.camera.alpha = alpha; }, Math.atan2(-facade.ny, facade.nx));
+  await expect.poll(() => page.evaluate(() => {
+    const preview = (window as any).__preview;
+    const target = preview.camera.target, actor = preview.player.mesh.position;
+    return Math.hypot(target.x - actor.x, target.z - actor.z);
+  })).toBeLessThan(0.1);
+  for (const preset of ["day", "sunset", "night"] as const) {
+    await page.locator(`[data-lighting="${preset}"]`).click();
+    const frame = (await cameraState()).frame;
+    await expect.poll(async () => (await cameraState()).frame).toBeGreaterThan(frame + 2);
+    const image = await canvas.screenshot({ path: testInfo.outputPath(`blinkwater-${preset}.png`) });
+    const appearance = await screenshotAppearance(page, image);
+    expect(appearance.colours, `${preset}: the flats have visible detail`).toBeGreaterThan(50);
+    expect(appearance.brightLuminance, `${preset}: the flats remain readable`).toBeGreaterThan(30);
+  }
   expect(errors).toEqual([]);
 });
 

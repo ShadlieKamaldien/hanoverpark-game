@@ -1,4 +1,5 @@
 export type LightingPreset = "day" | "sunset" | "night";
+export type ViewPreset = "street" | "overview";
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -17,6 +18,7 @@ export class PreviewInterface {
   onResume: (() => void) | null = null;
   onRecenter: (() => void) | null = null;
   onLightingChanged: ((preset: LightingPreset) => void) | null = null;
+  onViewChanged: ((preset: ViewPreset) => void) | null = null;
 
   private readonly startOverlay = element<HTMLElement>("preview-start");
   private readonly pauseOverlay = element<HTMLElement>("preview-pause");
@@ -28,6 +30,7 @@ export class PreviewInterface {
   private readonly lightingButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>("[data-lighting]"),
   );
+  private readonly viewButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-view]"));
   private started = false;
   private paused = false;
 
@@ -46,6 +49,12 @@ export class PreviewInterface {
         const preset = button.dataset.lighting as LightingPreset;
         this.setLighting(preset);
         this.onLightingChanged?.(preset);
+        this.canvas.focus({ preventScroll: true });
+      });
+    }
+    for (const button of this.viewButtons) {
+      button.addEventListener("click", () => {
+        this.onViewChanged?.(button.dataset.view as ViewPreset);
         this.canvas.focus({ preventScroll: true });
       });
     }
@@ -93,6 +102,12 @@ export class PreviewInterface {
   setLighting(preset: LightingPreset): void {
     for (const button of this.lightingButtons) {
       button.setAttribute("aria-pressed", String(button.dataset.lighting === preset));
+    }
+  }
+
+  setView(preset: ViewPreset): void {
+    for (const button of this.viewButtons) {
+      button.setAttribute("aria-pressed", String(button.dataset.view === preset));
     }
   }
 

@@ -135,7 +135,7 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
 .preview-compact-menu { width: 480px; }
 .preview-keyboard-note { display: none; }
 @media (max-width: 1050px) {
-  .preview-actions { gap: 5px; right: 16px; }
+  .preview-actions { gap: 5px; right: 16px; max-width: calc(100% - 320px); flex-wrap: wrap; justify-content: flex-end; }
   .preview-place { left: 16px; max-width: 35vw; }
   .preview-place h2 { font-size: 18px; }
   .preview-lighting legend { display: none; }
@@ -166,7 +166,7 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   .preview-intro { font-size: 12px; }
   .preview-place { top: 14px; left: 14px; max-width: calc(100% - 28px); padding: 10px 12px; }
   .preview-place h2 { font-size: 16px; }
-  .preview-actions { top: 106px; right: 14px; left: 14px; justify-content: flex-start; flex-wrap: wrap; }
+  .preview-actions { top: 106px; right: 14px; left: 14px; max-width: none; justify-content: flex-start; flex-wrap: wrap; }
   .preview-controls { display: none; }
   .preview-map { width: 174px; right: 14px; bottom: 35px; padding: 6px; }
   #preview-minimap { width: 160px; height: 131px; }
@@ -174,7 +174,7 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   .preview-map a { font-size: 7px; }
   .preview-map-note { left: 14px; bottom: 14px; font-size: 8px; }
   .preview-keyboard-note { display: block; font-size: 10px; color: #ebd098; line-height: 1.5; }
-  #preview-hud > .preview-keyboard-note { position: absolute; left: 14px; top: 155px; padding: 7px 10px; background: #142820e8; }
+  #preview-hud > .preview-keyboard-note { position: absolute; left: 14px; top: 218px; padding: 7px 10px; background: #142820e8; }
   .preview-start-attribution { font-size: 8px; right: 18px; bottom: 14px; }
 }
 @media (pointer: coarse) {
