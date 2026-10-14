@@ -34,6 +34,39 @@ async function position(page: Page, point: Point) {
   }, point);
 }
 
+async function sampleMovement(page: Page, key: string, code: string, seconds = 0.7) {
+  // Count time passed to the real controller while a real keyboard key is
+  // held. This observes the render loop without changing dt, input or physics;
+  // a slow software GPU should not make the walking speed contract flaky.
+  await page.evaluate((code) => {
+    const preview = (window as any).__preview;
+    const sample = { elapsed: 0, original: preview.player.update };
+    preview.movementSample = sample;
+    preview.player.update = function (dt: number, keys: Set<string>, forward: unknown) {
+      const result = sample.original.call(this, dt, keys, forward);
+      if (keys.has(code)) sample.elapsed += dt;
+      return result;
+    };
+  }, code);
+  let result!: { elapsed: number; position: Point };
+  try {
+    await page.keyboard.down(key);
+    await expect.poll(() => page.evaluate(() => (window as any).__preview.movementSample.elapsed), {
+      timeout: 15_000,
+    }).toBeGreaterThanOrEqual(seconds);
+  } finally {
+    await page.keyboard.up(key);
+    result = await page.evaluate(() => {
+      const preview = (window as any).__preview;
+      const result = { elapsed: preview.movementSample.elapsed, position: { ...preview.player.position } };
+      preview.player.update = preview.movementSample.original;
+      delete preview.movementSample;
+      return result;
+    });
+  }
+  return result;
+}
+
 function inside(point: Point, polygon: Point[]) {
   let result = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -142,10 +175,12 @@ test("3D walking and sprinting respect rotated walls and open courtyards, pause 
     const camera = (window as any).__preview.camera;
     return { alpha: camera.alpha, beta: camera.beta, radius: camera.radius };
   });
-  await hold(page, "d", 1_000);
-  const walking = await actor(page);
+  const walk = await sampleMovement(page, "d", "KeyD");
+  const walking = walk.position;
   const walkDistance = walking.x - initial.x;
   expect(walkDistance).toBeGreaterThan(10);
+  const walkSpeed = walkDistance / MAP.projection.pixelsPerMetre / walk.elapsed;
+  expect(walkSpeed).toBeCloseTo(4, 1);
   expect(inside(walking, open.ring)).toBe(true);
   const orbit = await page.evaluate(() => {
     const camera = (window as any).__preview.camera;
@@ -156,10 +191,13 @@ test("3D walking and sprinting respect rotated walls and open courtyards, pause 
   expect(orbit.radius).toBeCloseTo(initialOrbit.radius, 5);
   await position(page, open.centre);
   await page.keyboard.down("Shift");
-  await hold(page, "d", 1_000);
-  await page.keyboard.up("Shift");
-  const sprinting = await actor(page);
-  expect(sprinting.x - open.centre.x).toBeGreaterThan(walkDistance * 1.2);
+  let sprint!: Awaited<ReturnType<typeof sampleMovement>>;
+  try { sprint = await sampleMovement(page, "d", "KeyD"); }
+  finally { await page.keyboard.up("Shift"); }
+  const sprinting = sprint.position;
+  const sprintSpeed = (sprinting.x - open.centre.x) / MAP.projection.pixelsPerMetre / sprint.elapsed;
+  expect(sprintSpeed).toBeCloseTo(7, 1);
+  expect(sprintSpeed).toBeGreaterThan(walkSpeed * 1.2);
   expect(inside(sprinting, open.ring)).toBe(true);
 
   const sourceWall = wall();
@@ -206,7 +244,10 @@ test("3D walking and sprinting respect rotated walls and open courtyards, pause 
   await page.waitForTimeout(350);
   expect(await actor(page)).toEqual(blurred);
   await page.keyboard.up("d");
-  await hold(page, "d", 350);
+  await page.keyboard.down("d");
+  try {
+    await expect.poll(async () => (await actor(page)).x, { timeout: 15_000 }).toBeGreaterThan(blurred.x + 3);
+  } finally { await page.keyboard.up("d"); }
   expect((await actor(page)).x).toBeGreaterThan(blurred.x + 3);
   expect(errors).toEqual([]);
 });
