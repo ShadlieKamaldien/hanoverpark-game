@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#142820" />
+    <meta name="description" content="Explore mapped Hanover Park streets and original flats in a playable 3D preview." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Hanover Park • 3D Preview</title>
+  </head>
+  <body>
+    <div id="preview-app">
+      <header class="preview-masthead">
+        <a class="preview-brand" href="/" aria-label="Hanover Park: play the 2D game">HP<span>●</span></a>
+        <span class="preview-masthead-title">STREETS OF THE FLATS</span>
+        <span class="preview-edition">3D PREVIEW</span>
+      </header>
+      <main id="preview-stage" aria-label="Hanover Park 3D preview">
+        <canvas id="preview-canvas" tabindex="0" aria-label="3D neighbourhood preview" aria-describedby="preview-controls" aria-busy="true"></canvas>
+        <div id="preview-hud" hidden>
+          <section class="preview-place" aria-label="Your location">
+            <span class="preview-eyebrow">YOU ARE HERE</span>
+            <h2 id="preview-street" aria-live="polite">Downberg Road</h2>
+            <span id="preview-position" aria-hidden="true">Hanover Park · Cape Town</span>
+          </section>
+          <div class="preview-actions">
+            <fieldset class="preview-lighting">
+              <legend>LIGHT</legend>
+              <button type="button" data-lighting="day" aria-pressed="false">DAY</button>
+              <button type="button" data-lighting="sunset" aria-pressed="true">SUNSET</button>
+              <button type="button" data-lighting="night" aria-pressed="false">NIGHT</button>
+            </fieldset>
+            <button id="preview-recenter" class="preview-small-button" type="button" aria-label="Recenter the camera on your character">RECENTER</button>
+            <button id="preview-pause-button" class="preview-small-button" type="button" aria-label="Pause the 3D preview">PAUSE <span>II</span></button>
+          </div>
+          <p id="preview-controls" class="preview-controls"><span><b>WASD / ARROWS</b> Walk</span><span><b>SHIFT</b> Sprint</span><span><b>DRAG</b> Orbit</span><span><b>WHEEL</b> Zoom</span><span><b>ESC</b> Pause</span></p>
+          <aside class="preview-map" aria-label="Neighbourhood minimap">
+            <div class="preview-map-heading"><span>HANOVER PARK</span><span>N ↑</span></div>
+            <canvas id="preview-minimap" width="220" height="180" aria-label="Minimap showing the mapped streets and your position"></canvas>
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
+          </aside>
+          <p class="preview-map-note">Available mapped buildings · Original architecture</p>
+          <p class="preview-keyboard-note">Keyboard and mouse needed for this preview.</p>
+        </div>
+        <section id="preview-start" class="preview-overlay" aria-labelledby="preview-start-title">
+          <div class="preview-menu">
+            <span class="preview-eyebrow">3D PREVIEW · DOWNBERG ROAD</span>
+            <h1 id="preview-start-title">THE FLATS.<br /><span>ANOTHER ANGLE.</span></h1>
+            <p class="preview-intro">Walk the mapped streets and explore the flats in 3D. Start near Downberg Road, follow the courtyards and see the neighbourhood in a different light.</p>
+            <p id="preview-loading" class="preview-loading" role="status">Getting the neighbourhood ready…</p>
+            <button id="preview-start-button" class="preview-primary" type="button" disabled>ENTER 3D PREVIEW <span>→</span></button>
+            <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
+            <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom · <b>ESC</b> Pause</p>
+            <p class="preview-keyboard-note">Keyboard and mouse needed for this preview.</p>
+            <p class="preview-source-note">Real mapped streets. Original architecture.<br />This preview is for exploring; missions are in the 2D game.</p>
+          </div>
+          <div class="preview-postcard" aria-hidden="true"><span>CAPE TOWN, SOUTH AFRICA</span><b>DOWNBERG ROAD<br />HANOVER PARK</b><small>33°59′ S · 18°31′ E</small></div>
+          <a class="preview-start-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
+        </section>
+        <section id="preview-pause" class="preview-overlay preview-pause-overlay" aria-labelledby="preview-pause-title" hidden>
+          <div class="preview-menu preview-compact-menu">
+            <span class="preview-eyebrow">TAKE A MOMENT</span>
+            <h1 id="preview-pause-title">PAUSED.</h1>
+            <p class="preview-intro">Your walk will continue where you left off.</p>
+            <button id="preview-resume-button" class="preview-primary" type="button">CONTINUE EXPLORING <span>→</span></button>
+            <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
+            <p class="preview-source-note">WASD / arrows to walk · Shift to sprint<br />Drag to orbit · Wheel to zoom · Esc to resume</p>
+          </div>
+        </section>
+        <section id="preview-error" class="preview-overlay" role="alertdialog" aria-labelledby="preview-error-title" aria-describedby="preview-error-message" hidden>
+          <div class="preview-menu preview-compact-menu">
+            <span class="preview-eyebrow">HANOVER PARK · 3D PREVIEW</span>
+            <h1 id="preview-error-title">LET’S TRY<br /><span>AGAIN.</span></h1>
+            <p id="preview-error-message" class="preview-intro" role="alert">The 3D preview couldn’t start in this browser. You can retry or keep playing the 2D game.</p>
+            <button id="preview-retry-button" class="preview-primary" type="button">TRY AGAIN <span>→</span></button>
+            <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
+          </div>
+          <a class="preview-start-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/preview3d/main.ts"></script>
+  </body>
+</html>

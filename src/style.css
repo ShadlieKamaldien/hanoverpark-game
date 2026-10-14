@@ -149,6 +149,18 @@ button:hover {
   letter-spacing: 0;
   color: #bfc8b6;
 }
+.preview-link {
+  display: block;
+  width: fit-content;
+  margin-bottom: 9px;
+  color: #edbd59;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.preview-link:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}
 .postcard {
   margin-left: auto;
   align-self: flex-end;

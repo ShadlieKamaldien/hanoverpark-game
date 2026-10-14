@@ -25,6 +25,18 @@ npm run preview
 
 `dist/` is the static production output.
 
+## Babylon.js 3D preview
+
+Choose **Explore 3D Preview** on the main menu, or open `/3d.html` on the deployed site. The same static Azure deployment includes both pages; no game server or paid GPU service is required. Azure also serves the preview at `/3d`.
+
+This first 3D version explores an approximately 800-metre-wide crop around Downberg Road. It uses the existing source map to build 25 mapped building footprints, streets and fields, preserving rotated walls and open courtyard holes. Procedural three-storey flats have weathered plaster, recessed windows, balconies, railings, gates and sourced court names. Architecture and decorative lamp placements are artistic approximations; the map's building coverage remains incomplete.
+
+WASD/arrows walk relative to the camera, Shift sprints, dragging orbits and the wheel zooms. **Recenter** restores the following camera. **Day**, **Sunset** and **Night** change sunlight, shadows and warm window/streetlamp lighting. Escape pauses; leaving the window clears held keys and pauses movement. The minimap shows the source streets, current position and OpenStreetMap attribution.
+
+WebGL and a desktop keyboard/mouse are required. If graphics cannot start, the preview provides a link to the 2D game. This is an exploration preview: missions, vehicles, encounters, neighbourhood audio and saved progress are still in the 2D game. The preview never reads or writes the 2D save.
+
+Babylon dependencies and the lockfile are committed. Run `npm ci` from this repository; installing packages from Cloud Shell's home directory does not change the game. Both HTML entries are built by Vite. `@babylonjs/loaders` is available for future original GLB models; this preview generates its artwork locally and makes no remote asset requests.
+
 ## Play
 
 | Control | Action |
@@ -95,6 +107,8 @@ Tests use `/usr/bin/chromium` when present; `CHROMIUM_PATH` can specify another 
 
 Twelve browser tests cover movement/sprint, rotated building collision, NPC conversations, mission/reward, save migration and refresh, pause/map, car handling, spatial audio output, mute/volume persistence, gameplay without Web Audio, optional R2 giving/refusal, robbery payment caps, keyboard escape, catches, encounter pause/refresh persistence, and sunset/night/dawn lighting with pause and viewport resize. Isolated interaction tests use a development-only positioning hook. A separate test walks the actual street route with keyboard input and no teleporting. Production-preview checks verify startup, keyboard movement, mission persistence, attribution and downloadable map data; the positioning hook is absent from production.
 
+Three additional Babylon browser tests check a real production WebGL render, keyboard movement, day/night changes, source attribution, untouched 2D saves and absent debug hooks; development sprinting, rotated walls, mapped courtyard holes, pause and blur; and a working fallback when WebGL is unavailable. Software WebGL flags are confined to the tests. The 2D game keeps its Canvas renderer.
+
 ## Structure and scope
 
 - `src/game/world/`: source geometry, locality registry, buildings, street surfaces, lighting and original sprites
@@ -103,6 +117,7 @@ Twelve browser tests cover movement/sprint, rotated building collision, NPC conv
 - `src/game/systems/`: polygon collision, spatial sound and validated saves
 - `src/game/missions/`: delivery states and reward
 - `src/game/ui/`: menus, dialogue, source guide and HUD
+- `src/preview3d/`: Babylon scene, source-map adapter, batched procedural architecture, walking actor and independent preview UI
 - `scripts/`: map acquisition and projection using the Python standard library
 
 The approximately 15254×12749 pixel world includes a minimap, three main NPCs, four fictional street encounters, wandering pedestrians, one driveable car, one mission and a gradual lighting cycle. Desktop keyboard play is intended. Interiors, combat, ambient moving traffic, additional missions/vehicles, touch controls and multiplayer are not implemented. Health is tracked and saved; robbery encounters affect money and have no combat/damage system. Phaser produces a bundle-size advisory; the production build succeeds.

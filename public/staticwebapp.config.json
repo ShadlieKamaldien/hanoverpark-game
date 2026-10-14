@@ -1,4 +1,8 @@
 {
+  "routes": [
+    { "route": "/3d", "rewrite": "/3d.html" },
+    { "route": "/3d/", "rewrite": "/3d.html" }
+  ],
   "navigationFallback": { "rewrite": "/index.html", "exclude": ["/assets/*"] },
   "mimeTypes": { ".js": "application/javascript" }
 }
