@@ -4,6 +4,7 @@ import type { MapPoint, MapRoad } from "../game/world/mapData";
 import { Collision } from "../game/systems/collision";
 import { BUILDINGS, PREVIEW, ROADS, SPAWN } from "./map";
 import { NpcActor, type Appearance } from "./npcActor";
+import { PROPERTY_SOLIDS } from "./properties";
 
 export type NpcRole = "neighbour" | "vendor" | "pedestrian" | "requester" | "stranger";
 export interface Conversation {
@@ -206,7 +207,7 @@ const definitions: Definition[] = [
 export class NeighbourhoodNpcs {
   readonly actors: NpcEntity[] = [];
   readonly shadowCasters: AbstractMesh[] = [];
-  private readonly collision = new Collision([], BUILDINGS.map((building) => ({ points: building.points, holes: building.holes })));
+  private readonly collision = new Collision([], [...BUILDINGS.map((building) => ({ points: building.points, holes: building.holes })), ...PROPERTY_SOLIDS]);
   private readonly scripts = new Map<string, Definition>();
   private readonly patrols = new Map<string, Patrol>();
   private active: NpcEntity | null = null;

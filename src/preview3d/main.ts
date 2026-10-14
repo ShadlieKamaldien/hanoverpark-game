@@ -19,6 +19,8 @@ import { NeighbourhoodNpcs } from "./npcs";
 import { buildWorld } from "./world";
 import { buildScenery } from "./scenery";
 import { PreviewSky } from "./atmosphere";
+import { buildProperties } from "./propertiesWorld";
+import { buildMappedWallArt } from "./wallArt";
 
 const ui = new PreviewInterface();
 
@@ -31,6 +33,8 @@ function startPreview() {
   scene.fogStart = 180;
   scene.fogEnd = 650;
   const world = buildWorld(scene);
+  const properties = buildProperties(scene);
+  const wallArt = buildMappedWallArt(scene);
   const scenery = buildScenery(scene);
   const sky = new PreviewSky(scene);
   const player = new PreviewPlayer(scene);
@@ -64,7 +68,7 @@ function startPreview() {
   shadows.filteringQuality = ShadowGenerator.QUALITY_LOW;
   shadows.bias = 0.003;
   shadows.normalBias = 0.02;
-  for (const mesh of [...world.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters]) shadows.addShadowCaster(mesh);
+  for (const mesh of [...world.shadowCasters, ...properties.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters]) shadows.addShadowCaster(mesh);
   // The merged body gives each neighbour a silhouette without five shadow draws.
   for (const entity of npcs.actors) shadows.addShadowCaster(entity.actor.shadowCasters[0]);
   // An explicit shadow render list otherwise submits off-screen buildings too.
@@ -129,6 +133,8 @@ function startPreview() {
   for (const road of ROADS) { map.lineWidth = Math.max(0.7, road.width * scale); map.beginPath(); path(road.points); map.stroke(); }
   map.fillStyle = "#b0a78c";
   for (const building of BUILDINGS) { map.beginPath(); path(building.points, true); for (const hole of building.holes ?? []) path(hole, true); map.fill("evenodd"); }
+  map.fillStyle = "#887b64";
+  for (const property of properties.placements) { map.beginPath(); path(property.footprint, true); map.fill(); }
   const updateLocation = () => {
     const p = player.position, geo = gameCoordinates(p.x, p.y);
     ui.status(closestStreet(p), `${geo.latitude.toFixed(6)}°, ${geo.longitude.toFixed(6)}°`);
@@ -255,7 +261,7 @@ function startPreview() {
     } catch (error) { fail(error); }
   });
   if (import.meta.env.DEV) {
-    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
+    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
   }
   const pagehide = (event: PageTransitionEvent) => {
     if (event.persisted) blur();
@@ -271,7 +277,7 @@ function startPreview() {
     window.removeEventListener("resize", resize);
     document.removeEventListener("visibilitychange", visibility);
     window.removeEventListener("pagehide", pagehide);
-    npcs.dispose(); player.dispose(); scene.dispose(); engine.dispose();
+    npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
   };
   window.addEventListener("pagehide", pagehide);
   if (import.meta.hot) import.meta.hot.dispose(dispose);

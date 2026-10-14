@@ -6,6 +6,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Collision } from "../game/systems/collision";
 import { BUILDINGS, PREVIEW, SPAWN, toWorld } from "./map";
+import { PROPERTY_SOLIDS } from "./properties";
 
 const BODY_RADIUS = 3.2;
 const SOURCE_PIXELS_PER_METRE = 8;
@@ -21,10 +22,10 @@ export class PreviewPlayer {
   private readonly limbs: TransformNode[] = [];
   private readonly collision = new Collision(
     [],
-    BUILDINGS.map((building) => ({
+    [...BUILDINGS.map((building) => ({
       points: building.points,
       holes: building.holes,
-    })),
+    })), ...PROPERTY_SOLIDS],
   );
   private gait = 0;
   private idleTime = 0;

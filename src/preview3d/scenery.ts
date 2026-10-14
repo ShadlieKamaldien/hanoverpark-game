@@ -6,6 +6,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { MapFootprint, MapPoint } from "../game/world/mapData";
 import { Batch } from "./geometry";
 import { BUILDINGS, FIELDS, PREVIEW, ROADS, SPAWN, fromWorld, toWorld } from "./map";
+import { WEATHERED_PROPERTIES } from "./properties";
 
 export interface SceneryPlacement {
   kind: "tree" | "shrub" | "bench" | "bin" | "bollard" | "drain" | "wear";
@@ -32,7 +33,7 @@ function distance(point: MapPoint, a: MapPoint, b: MapPoint) {
   return Math.hypot(point.x - a.x - t * dx, point.y - a.y - t * dy);
 }
 
-function clearOfFootprint(point: MapPoint, radius: number, footprint: MapFootprint) {
+function clearOfFootprint(point: MapPoint, radius: number, footprint: Pick<MapFootprint, "points" | "holes">) {
   const rings = [footprint.points, ...(footprint.holes ?? [])];
   const inOuter = inside(point, footprint.points);
   const inHole = (footprint.holes ?? []).some((hole) => inside(point, hole));
@@ -76,6 +77,7 @@ export function buildScenery(scene: Scene): {
     const bounds = PREVIEW.bounds;
     if (p.x < bounds.minX + sourceRadius || p.x > bounds.maxX - sourceRadius || p.y < bounds.minY + sourceRadius || p.y > bounds.maxY - sourceRadius) return false;
     if (BUILDINGS.some((building) => !clearOfFootprint(p, sourceRadius + 2.4 / mpp, building))) return false;
+    if (WEATHERED_PROPERTIES.some((property) => !clearOfFootprint(p, sourceRadius + 0.7 / mpp, { points: property.lot }))) return false;
     // Keep every mapped playing surface clear, including nested pitch outlines.
     if (FIELDS.some((field) => !clearOfFootprint(p, sourceRadius, field))) return false;
     if (segments.some(({ road, a, end }) => {
