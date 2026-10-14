@@ -1,19 +1,21 @@
 # Hanover Park: Streets of the Flats
 
-A playable, original top-down neighbourhood adventure built with Phaser 3, TypeScript and Vite. Explore a fictionalised Cape Flats neighbourhood as Riyaad, borrow a mint hatchback, and deliver Aunty Fatima's groceries to Block C for R150.
+A playable top-down neighbourhood adventure built with Phaser 3, TypeScript and Vite. Explore Hanover Park's mapped streets as Riyaad, borrow a mint hatchback, and deliver Aunty Fatima's groceries from near Shoprite Lansdowne Corner to Blinkwater Hof for R150.
 
-The layout, characters, artwork and dialogue are fictional. This is not a geographic recreation, and it uses no GTA artwork, logos, music or other external game assets. All sprites and scenery are generated locally. No API keys, accounts or backend services are required.
+The north-up world uses OpenStreetMap road centrelines, the community-mapped Hanover Park boundary, 59 building footprints and nine named places. Downberg Road, Hanover Park Avenue and Surran Road keep their mapped positions. Mapped courts include Galway Court, Hangklip Hof, Galilee Court, Pelikaan Hof, Agulhas Court, Algoa Hof, Blinkwater Hof and Donegal Court. The Area Guide also lists 28 court names published by the City of Cape Town in 2015. Historical names without matched coordinates are not placed on guessed buildings.
+
+Building coverage is incomplete. Road widths, architecture and scenery are simplified for play; characters, entrances and the story taxi stop are fictional. Mapped shop names do not guarantee current trading status. All pixel art and dialogue are original, with no GTA artwork, logos, music or external game assets. The included map works offline after download: no map API keys, paid services, account or backend is required to play.
 
 ## Run
 
 Requires Node.js 22.12+ (Node 24 recommended) and npm.
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite in your local development browser. The cloud onboarding UI does not provide a localhost preview.
+Open Vite's URL in a local development browser. The cloud onboarding UI does not provide a localhost preview.
 
 ```sh
 npm run typecheck
@@ -21,25 +23,52 @@ npm run build
 npm run preview
 ```
 
-`npm ci` reproduces the committed dependency lockfile. `dist/` is the static production output.
+`dist/` is the static production output.
 
 ## Play
 
 | Control | Action |
 | --- | --- |
 | WASD / arrows | Walk; accelerate/brake and steer while driving |
-| Shift | Sprint (uses stamina, which regenerates) |
+| Shift | Sprint (uses regenerating stamina) |
 | E | Speak, deliver groceries, enter or exit the hatchback |
 | M | Expand/collapse the neighbourhood map |
 | Escape | Pause/resume or dismiss dialogue |
 
-Choose **Start Game** for a fresh run, or **Continue Game** when saved progress is available. Starting a fresh game replaces the existing save in this browser.
+Choose **Start Game** for a fresh run, or **Continue Game** for saved progress. Starting a fresh game replaces the existing save in this browser.
 
-Aunty Fatima stands just east of your spawn, in front of the corner shop. Press E nearby, then **Accept Delivery**. Follow the gold map marker to Block C's front door, in the northeast. Press E nearby to deliver and receive R150 exactly once. A connected walking route follows the central horizontal road east, then north past the taxi-rank road, then east along the pavement below Block C.
+Aunty Fatima stands just east of your spawn near Shoprite Lansdowne Corner. Press E nearby, then **Accept Delivery**. Follow the gold map marker north to Blinkwater Hof. The connected walking route follows actual mapped street segments; the destination is approximately 472 metres away along that route. Press E at the marker to receive R150 exactly once. The minimap includes the source boundary, real road shapes, north indication and your latitude/longitude.
 
-The hatchback is south of the corner shop, on the north–south road beside Gatie's garage. W/up accelerates; S/down brakes then reverses; A/D steers. Coast or brake until nearly stopped to exit. The camera follows your current character or vehicle. Cars, buildings, trees and fences are solid. Movement uses small collision substeps to prevent passing through obstacles at speed.
+The hatchback starts east of Fatima. W/up accelerates; S/down brakes then reverses; A/D steers. Coast or brake until nearly stopped before exiting. Mapped building polygons are solid, including rotated walls and open courtyards. Movement uses small collision substeps to prevent passing through obstacles at speed.
 
-Mission state, money, health, player position and car position/heading save to browser localStorage every two seconds and at mission transitions, vehicle exits, pause and page exit. Continuing from a car restores Riyaad safely outside it. Saves are tied to browser profile and origin; clearing site data removes them. Storage errors are reported in the game.
+Mission state, money, health, player and car position/heading save to localStorage every two seconds and at mission transitions, vehicle exits, pause and page exit. Continuing from a car restores Riyaad safely outside it. Saves from the earlier fictional layout retain money, health and mission progress while moving characters and the car to the new map's spawn. Saves belong to a browser profile and origin; clearing site data removes them. Storage errors are reported in the game.
+
+## Map sources and refresh
+
+[Research and limitations](docs/real-map-research.md) records dated municipal and OpenStreetMap sources. Data is attributed to **© OpenStreetMap contributors** and licensed under **ODbL 1.0**; see [the map-data notice](public/map-data/README.md). Both the filtered source snapshot and derived geometry are included as downloadable files in the production build. No contributor usernames, contact numbers or credentials are stored.
+
+The committed map is sufficient for normal development and deployment. An intentional data refresh needs Python 3, curl and HTTPS access to `api.openstreetmap.org`:
+
+```sh
+npm run map:fetch
+npm test
+```
+
+The refresh reads suburb relation **2046907** and its finite bounding-box crop from the official OSM API. It validates complete way-node references, Downberg Road, named mission anchors and a connected delivery route before replacing the snapshot. It keeps TLS verification enabled. Reproject the existing snapshot without network access with:
+
+```sh
+python3 scripts/import-osm.py
+```
+
+Road widths are enlarged for gameplay. The boundary is community map data, not a surveyed legal boundary. Refreshing source geometry changes the save-world identifier so obsolete positions migrate safely. Do not relabel arbitrary buildings to fill coverage gaps.
+
+## Neighbourhood atmosphere
+
+Original council-flat artwork adds roof/façade depth, windows, balconies, laundry, surface wear and trees along the real source geometry. Original English/Afrikaans dialogue uses Cape Flats expressions such as “awe”, “hosh”, “my bru” and “sharp sharp”. It is fictional writing, not quoted residents' speech or a resident-approved performance.
+
+Sound starts after Start/Continue and is generated locally with Web Audio: breeze, footsteps, an engine responding to the hatchback's speed, and distance-sensitive shop, story taxi-stop and Downberg pitch ambience. Mute and volume persist independently of game saves; audio stops on pause or loss of focus.
+
+Nearby conversation snippets appear as captions. Optional **Synth Voices** uses an installed English browser speech-synthesis voice when available. It is off by default and has no guaranteed local accent. Recorded performances from consenting local speakers would be needed for authentic spoken voices. Captions and gameplay work without Web Audio or a voice pack.
 
 ## Browser tests
 
@@ -48,47 +77,33 @@ PLAYWRIGHT_BROWSERS_PATH=.cache/ms-playwright npx playwright install --with-deps
 npm test
 ```
 
-Tests automatically use `/usr/bin/chromium` when present; `CHROMIUM_PATH` can specify another compatible executable. Otherwise they use the downloaded Playwright browser. Cloud setup uses the preinstalled Chromium and requires no browser download.
+Tests use `/usr/bin/chromium` when present; `CHROMIUM_PATH` can specify another compatible executable. Otherwise they use the downloaded Playwright browser. Cloud setup uses preinstalled Chromium.
 
-The seven browser tests exercise keyboard movement and sprinting, building collision, all three NPC conversations, mission acceptance/completion, single reward, refresh persistence, pause, map toggle, corrupted-save rejection, and entering/driving/steering/braking/colliding/exiting the car. Isolated interaction tests use a development-only positioning hook to shorten travel; a separate end-to-end test walks from the actual spawn to the mission destination using keyboard input without teleporting. The development hook is absent from production builds. A production-preview smoke test checks startup, real keyboard movement, mission acceptance and refresh persistence without that hook.
+Seven browser tests cover movement/sprint, rotated building collision, NPC conversations, mission/reward, save migration and refresh, pause/map, car handling, spatial audio output, mute/volume persistence, and gameplay without Web Audio. Isolated interaction tests use a development-only positioning hook. A separate test walks the actual street route with keyboard input and no teleporting. Production-preview checks verify startup, keyboard movement, mission persistence, attribution and downloadable map data; the positioning hook is absent from production.
 
-## Structure
+## Structure and scope
 
+- `src/game/world/`: source geometry, locality registry, scenery and original sprites
 - `src/game/scenes/`: scene lifecycle and gameplay orchestration
-- `src/game/entities/`: walking, vehicle handling and NPC definitions
-- `src/game/systems/`: solid collision and validated save storage
+- `src/game/entities/`: walking, vehicle handling and fictional NPCs
+- `src/game/systems/`: polygon collision, spatial sound and validated saves
 - `src/game/missions/`: delivery states and reward
-- `src/game/world/`: seeded procedural scenery and original pixel sprites
-- `src/game/ui/`: responsive menus, dialogue and HUD
-- `src/game/config/`: world bounds and save types
+- `src/game/ui/`: menus, dialogue, source guide and HUD
+- `scripts/`: map acquisition and projection using the Python standard library
 
-## Static hosting / Azure
+The approximately 15254×12749 pixel world includes a minimap, three named NPCs, wandering pedestrians, one driveable car, one mission and a gradual lighting cycle. Desktop keyboard play is intended. Interiors, combat, ambient moving traffic, additional missions/vehicles, touch controls and multiplayer are not implemented. Health is tracked and saved; this peaceful prototype has no damage system. Phaser produces a bundle-size advisory; the production build succeeds.
 
-Vite builds to `dist/`; `public/staticwebapp.config.json` is copied into that output. For Azure Static Web Apps use app location `/`, no API location, output location `dist`, and build command `npm run build`. The build-validation workflow installs locked dependencies, checks TypeScript, builds and runs browser tests. A separate manually triggered deployment workflow uploads the static output to Azure; it does not create Azure resources. Deployment requires the Azure resource and secure repository secret described below.
+## Azure Static Web Apps
 
-## Prototype scope
+Vite builds to `dist/`; `public/staticwebapp.config.json` is copied into that output. Use app location `/`, no API location, output location `dist`, and build command `npm run build`.
 
-Includes a 2400×1800 scrolling neighbourhood, flats with balconies/washing lines/stairs, corner shop and takeaway, taxi rank, parked vehicles, pitch, trees, streetlights, fences, wandering pedestrians, three named NPCs, one driveable car, one complete mission, menus, HUD, minimap and a gradual lighting cycle.
+The build-validation workflow installs locked dependencies and runs TypeScript, build and browser checks. The separate **Deploy game to Azure** workflow uploads static output to production when manually triggered. Source pushes do not redeploy automatically.
 
-Not included: interiors, combat, ambient moving traffic, recorded local voices/music, additional missions or vehicles, touch/mobile controls, exact street geography, multiplayer or paid AI dialogue. Health is tracked and saved; this peaceful prototype has no combat/damage system. Desktop keyboard play is the intended workflow. Phaser is a substantial dependency and Vite reports a bundle-size advisory; the production build succeeds.
+For a new Free Static Web App:
 
-## Deploy a new Azure Free Static Web App
+1. Create an Azure **Static Web App**, select **Free**, and use **Other** as the deployment source to avoid a competing generated workflow. Suggested name: `hanoverpark-streets`; resource group: `hanoverpark-game-rg`. A subscription is required even for the Free plan.
+2. Copy its **Manage deployment token** value directly into GitHub **Settings → Secrets and variables → Actions**, with secret name `AZURE_STATIC_WEB_APPS_API_TOKEN`. Never commit the token or paste it into chat.
+3. Run GitHub **Actions → Deploy game to Azure → Run workflow** on `feat/playable-neighbourhood`. The job summary reports the Azure URL.
+4. Open that URL, complete a delivery and refresh to verify persistence. Local development saves do not transfer to a different origin.
 
-1. Sign in to the Azure portal and create a **Static Web App**. Suggested name: `hanoverpark-streets`; pricing plan: **Free**; resource group: `hanoverpark-game-rg`; choose an available region such as **West Europe**. Select **Other** as the deployment source so Azure does not create a competing workflow. An Azure subscription is required, even for the Free plan.
-2. Open the new resource's **Manage deployment token** action and copy its token directly into the GitHub repository's **Settings → Secrets and variables → Actions → New repository secret**, named `AZURE_STATIC_WEB_APPS_API_TOKEN`. Never commit this token or paste it into chat.
-3. In GitHub **Actions → Deploy game to Azure → Run workflow**, select `feat/playable-neighbourhood` and run the workflow. It installs the lockfile, typechecks/builds with Node 24, and uploads `dist/` as the production static site. The GitHub job summary reports the Azure game URL.
-4. Open the Azure URL, start the game, complete the delivery and refresh to verify persistence on that origin. Local development saves do not transfer to the Azure URL.
-
-The workflow is manual: ordinary source pushes run build validation and do not redeploy production. Selecting a branch in this deployment workflow publishes that selected branch to production. No database, Functions API, paid SKU or other service is configured.
-
-## Neighbourhood atmosphere update
-
-Buildings now have distinct council-flat, shop and garage treatments, with original roof/façade depth, balconies, stairs, washing lines, surface wear and more detailed original character/vehicle artwork. The taxi rank has fictional minibuses. The geography and businesses remain fictional.
-
-Sound starts after Start/Continue and is generated locally with Web Audio: breeze, varied footsteps, an engine that responds to the hatchback's speed, and distance-sensitive shop, taxi-rank and football-pitch ambience. Mute and volume controls are in the top bar, persist independently of your save, and audio stops on pause or loss of focus. No downloaded clips, external audio service or paid API is needed.
-
-Nearby original conversation snippets appear as captions. The optional **Voices** switch uses an installed English browser speech-synthesis voice when available; it is off by default, has no guaranteed local accent, and is not a recording of residents. Captions work even when your browser has no voice pack. NPC character dialogue now separates conversation from keyboard instructions. Convincing local voice performances remain a future contribution from consenting local speakers.
-
-The new audio browser tests measure actual Web Audio output, check that sound zones follow location, verify mute/volume and pause/resume, confirm preference persistence, and exercise gameplay without a Web Audio API. It does not claim to validate cultural accuracy or recorded speech.
-
-Area-specific live research was attempted but the cloud network policy blocked the candidate public sources before their pages could be read. [Research status and follow-up](docs/authenticity-research.md) documents that limitation and separates fictional design choices from facts still needing verification. The research site allowlist has been saved in the cloud configuration draft; live research can resume after the network settings are applied. These changes are not described as resident-verified Hanover Park geography or speech.
+The workflow does not create Azure resources. It configures no paid SKU, database or Functions API.

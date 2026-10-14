@@ -5,8 +5,76 @@ export interface Rect {
   w: number;
   h: number;
 }
+export interface Point {
+  x: number;
+  y: number;
+}
+export interface Polygon {
+  points: Point[];
+  holes?: Point[][];
+}
+
+function inRing(x: number, y: number, points: Point[]) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i];
+    const b = points[j];
+    if (
+      (a.y > y) !== (b.y > y) &&
+      x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x
+    )
+      inside = !inside;
+  }
+  return inside;
+}
+
+function touchesRing(
+  x: number,
+  y: number,
+  radiusSquared: number,
+  points: Point[],
+) {
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[j];
+    const b = points[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const t =
+      lengthSquared === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / lengthSquared),
+          );
+    const distanceX = x - (a.x + t * dx);
+    const distanceY = y - (a.y + t * dy);
+    if (distanceX * distanceX + distanceY * distanceY <= radiusSquared)
+      return true;
+  }
+  return false;
+}
+
 export class Collision {
-  constructor(public solids: Rect[]) {}
+  private readonly polygons: Array<{
+    shape: Polygon;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  }>;
+
+  constructor(public solids: Rect[], polygons: Polygon[] = []) {
+    this.polygons = polygons
+      .filter((shape) => shape.points.length >= 3)
+      .map((shape) => ({
+        shape,
+        minX: Math.min(...shape.points.map((p) => p.x)),
+        minY: Math.min(...shape.points.map((p) => p.y)),
+        maxX: Math.max(...shape.points.map((p) => p.x)),
+        maxY: Math.max(...shape.points.map((p) => p.y)),
+      }));
+  }
   blocked(x: number, y: number, radius: number) {
     return (
       x < radius ||
@@ -19,7 +87,29 @@ export class Collision {
           x - radius < r.x + r.w &&
           y + radius > r.y &&
           y - radius < r.y + r.h,
-      )
+      ) ||
+      this.polygons.some(({ shape, minX, minY, maxX, maxY }) => {
+        if (
+          x + radius < minX ||
+          y + radius < minY ||
+          x - radius > maxX ||
+          y - radius > maxY
+        )
+          return false;
+
+        const holes = shape.holes ?? [];
+        // A courtyard is empty space, but its walls still block the actor's circle.
+        if (
+          inRing(x, y, shape.points) &&
+          !holes.some((hole) => inRing(x, y, hole))
+        )
+          return true;
+        const radiusSquared = radius * radius;
+        return (
+          touchesRing(x, y, radiusSquared, shape.points) ||
+          holes.some((hole) => touchesRing(x, y, radiusSquared, hole))
+        );
+      })
     );
   }
   move(

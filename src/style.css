@@ -473,3 +473,73 @@ kbd {
     max-width: 230px;
   }
 }
+.area-guide {
+  pointer-events: auto;
+  min-width: 0;
+  width: 100%;
+  padding: 8px;
+  margin: 10px 0 0;
+  background: #315445;
+  color: #e9d39a;
+  font-size: 9px;
+  text-align: center;
+}
+.locality-guide {
+  width: min(780px, 92vw);
+  max-width: none;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+.locality-guide h3 {
+  color: #edcf83;
+  font-size: 12px;
+  letter-spacing: 1px;
+  margin-top: 20px;
+}
+.locality-guide .guide-status,
+.locality-guide .guide-source {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #c1d1b9;
+}
+.court-list {
+  columns: 3;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.court-list li {
+  break-inside: avoid;
+}
+.facility-list {
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.guide-source a {
+  color: #edcf83;
+}
+@media (max-width: 700px) {
+  .court-list {
+    columns: 2;
+  }
+}
+.map-position {
+  font-family: monospace;
+  font-size: 8px;
+  color: #c6d1b8;
+  margin-top: 8px;
+}
+.map-attribution {
+  pointer-events: auto;
+  display: block;
+  margin-top: 6px;
+  font-size: 8px;
+  color: #d4c694;
+}
+.shop-list {
+  columns: 2;
+  font-size: 12px;
+  line-height: 1.8;
+  padding-left: 18px;
+}

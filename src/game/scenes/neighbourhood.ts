@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { WORLD, SPAWN, type SaveData } from "../config/constants";
+import { WORLD, WORLD_ID, SPAWN, type SaveData } from "../config/constants";
 import { Player } from "../entities/player";
 import { Vehicle } from "../entities/vehicle";
 import { NPCS, STREET_LINES } from "../entities/npc";
@@ -7,7 +7,8 @@ import { Collision } from "../systems/collision";
 import { loadSave, saveProgress } from "../systems/save";
 import { DeliveryMission, DESTINATION } from "../missions/delivery";
 import { createArt } from "../world/art";
-import { BUILDINGS, drawWorld } from "../world/neighbourhood";
+import { drawWorld } from "../world/neighbourhood";
+import { MAP, distanceToRoad, gameCoordinates } from "../world/mapData";
 import { Interface } from "../ui/interface";
 import { Ambience } from "../systems/ambience";
 import { StreetVoices } from "../systems/streetVoices";
@@ -44,8 +45,11 @@ export class Neighbourhood extends Phaser.Scene {
   }
   create() {
     createArt(this);
-    this.collision = new Collision(drawWorld(this));
-    this.car = new Vehicle(this, 620, 960);
+    this.collision = new Collision(
+      drawWorld(this),
+      MAP.buildings.map((b) => ({ points: b.points, holes: b.holes })),
+    );
+    this.car = new Vehicle(this, MAP.locations.car.x, MAP.locations.car.y);
     this.player = new Player(this, SPAWN.x, SPAWN.y);
     for (const npc of NPCS) {
       const resident = this.add
@@ -67,13 +71,12 @@ export class Neighbourhood extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(32);
     }
-    for (let i = 0; i < 12; i++) {
-      const x = 710 + (i % 6) * 190,
-        y = i < 6 ? 865 : 1556;
+    for (const [i, walker] of MAP.locations.walkers.entries()) {
+      const { x, y, dx, dy } = walker;
       this.pedestrians.push({
         sprite: this.add.sprite(x, y, `walker${i % 3}-down-0`).setDepth(29),
         from: { x, y },
-        to: { x: x + 110, y },
+        to: { x: x + dx, y: y + dy },
         phase: i,
       });
     }
@@ -180,15 +183,16 @@ export class Neighbourhood extends Phaser.Scene {
     this.audio.setPaused(false);
     this.audio.initialize();
     const d = continuing ? loadSave() : null;
-    this.player.x = d?.x ?? SPAWN.x;
-    this.player.y = d?.y ?? SPAWN.y;
+    const sameWorld = d?.worldId === WORLD_ID;
+    this.player.x = sameWorld ? d!.x : SPAWN.x;
+    this.player.y = sameWorld ? d!.y : SPAWN.y;
     this.player.health = d?.health ?? 100;
     this.player.stamina = 100;
     this.money = d?.money ?? 0;
     this.mission.status = d?.mission ?? "available";
-    this.car.x = d?.carX ?? 620;
-    this.car.y = d?.carY ?? 960;
-    this.car.angle = d?.carAngle ?? 0;
+    this.car.x = sameWorld ? d!.carX : MAP.locations.car.x;
+    this.car.y = sameWorld ? d!.carY : MAP.locations.car.y;
+    this.car.angle = sameWorld ? d!.carAngle : MAP.locations.car.angle;
     this.car.sprite.rotation = this.car.angle;
     this.car.speed = 0;
     if (this.collision.blocked(this.player.x, this.player.y, 10)) {
@@ -196,8 +200,8 @@ export class Neighbourhood extends Phaser.Scene {
       this.player.y = SPAWN.y;
     }
     if (this.collision.blocked(this.car.x, this.car.y, 32)) {
-      this.car.x = 620;
-      this.car.y = 960;
+      this.car.x = MAP.locations.car.x;
+      this.car.y = MAP.locations.car.y;
     }
     this.started = true;
     this.ui.start();
@@ -208,8 +212,8 @@ export class Neighbourhood extends Phaser.Scene {
       this.mission.status === "complete"
         ? "Welcome back to the block, Riyaad!"
         : this.mission.status === "active"
-          ? "Groceries on board · Block C is waiting."
-          : "Awe, Riyaad! Aunty Fatima is just up the road.",
+          ? `Groceries on board · ${DESTINATION.name} is waiting.`
+          : "Awe, Riyaad! Aunty Fatima is waiting by Shoprite.",
     );
   }
   store() {
@@ -217,6 +221,7 @@ export class Neighbourhood extends Phaser.Scene {
     const exit = this.driving ? this.car.exitPosition(this.collision) : null;
     const d: SaveData = {
       version: 1,
+      worldId: WORLD_ID,
       x: exit?.x ?? this.player.x,
       y: exit?.y ?? this.player.y,
       health: this.player.health,
@@ -259,8 +264,8 @@ export class Neighbourhood extends Phaser.Scene {
         const text =
           npc.name === "Aunty Fatima" && this.mission.status !== "available"
             ? this.mission.status === "active"
-              ? "Thank you for helping, Riyaad. Straight to Block C — she is waiting by the front door. No need to rush through the courtyard."
-              : "Everything arrived safely. Thank you, my child. You earned that R150. Come say hello whenever you pass."
+              ? `Dankie, my kind. Reguit na ${DESTINATION.name} — volg die marker. Loop mooi deur die courtyard, né.`
+              : "Lekker, alles het mooi aangekom. Dankie, my kind. Daai R150 is joune. Kom sê weer howzit as jy verbyloop."
             : npc.dialogue;
         this.voices.speak(text, this.audio.muted ? 0 : this.audio.volume);
         this.ui.dialogue(
@@ -271,7 +276,9 @@ export class Neighbourhood extends Phaser.Scene {
                 this.mission.accept();
                 this.store();
                 this.refreshHUD();
-                this.ui.notify("GROCERIES COLLECTED · Head to Block C");
+                this.ui.notify(
+                  `GROCERIES COLLECTED · Head to ${DESTINATION.name}`,
+                );
               }
             : undefined,
           npc.help,
@@ -348,12 +355,6 @@ export class Neighbourhood extends Phaser.Scene {
       );
       this.collision.solids.pop();
     }
-    const onRoad =
-      (this.player.y >= 700 && this.player.y <= 840) ||
-      (this.player.y >= 1390 && this.player.y <= 1530) ||
-      (this.player.x >= 480 && this.player.x <= 700) ||
-      (this.player.x >= 1130 && this.player.x <= 1380) ||
-      (this.player.x >= 2000 && this.player.x <= 2190);
     this.audio.update(dt, {
       x: this.player.x,
       y: this.player.y,
@@ -361,11 +362,7 @@ export class Neighbourhood extends Phaser.Scene {
       speed: this.car.speed,
       walking: Math.hypot(this.player.x - oldX, this.player.y - oldY) > 0.1,
       sprinting: this.keys.SHIFT.isDown && this.player.stamina > 2,
-      surface: onRoad
-        ? "road"
-        : this.player.y > 1200 && this.player.x > 1400
-          ? "earth"
-          : "pavement",
+      surface: distanceToRoad(this.player.x, this.player.y),
     });
     this.streetClock += dt;
     if (this.streetClock > 12) {
@@ -394,10 +391,13 @@ export class Neighbourhood extends Phaser.Scene {
     for (const [i, r] of this.residents.entries())
       r.sprite.y = r.y + Math.sin(this.worldTime * 2 + i) * 0.8;
     for (const [i, p] of this.pedestrians.entries()) {
-      const x = p.from.x + Math.sin(this.worldTime * 0.5 + p.phase) * 55 + 55,
-        dx = x - p.sprite.x;
+      const progress = (Math.sin(this.worldTime * 0.5 + p.phase) + 1) / 2;
+      const x = p.from.x + (p.to.x - p.from.x) * progress,
+        y = p.from.y + (p.to.y - p.from.y) * progress;
+      const dx = x - p.sprite.x,
+        dy = y - p.sprite.y;
       const a = { x: p.sprite.x, y: p.sprite.y };
-      this.collision.move(a, dx, 0, 10);
+      this.collision.move(a, dx, dy, 10);
       p.sprite
         .setPosition(a.x, a.y)
         .setTexture(
@@ -458,22 +458,50 @@ export class Neighbourhood extends Phaser.Scene {
     const c = canvas.getContext("2d")!;
     const sx = canvas.width / WORLD.width,
       sy = canvas.height / WORLD.height;
-    c.fillStyle = "#879478";
-    c.fillRect(0, 0, 240, 180);
-    c.fillStyle = "#44594f";
-    for (const r of [
-      { x: 0, y: 700, w: 2400, h: 140 },
-      { x: 0, y: 1390, w: 2400, h: 140 },
-      { x: 480, y: 0, w: 220, h: 1800 },
-      { x: 1130, y: 0, w: 250, h: 1800 },
-      { x: 2000, y: 0, w: 190, h: 1800 },
-    ])
-      c.fillRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
-    c.fillStyle = "#d7c7a2";
-    for (const b of BUILDINGS)
-      c.fillRect(b.x * sx, b.y * sy, b.w * sx, b.h * sy);
-    c.fillStyle = "#506d53";
-    c.fillRect(145, 123, 47, 48);
+    c.fillStyle = "#a5b18d";
+    c.fillRect(0, 0, canvas.width, canvas.height);
+    const polygon = (points: { x: number; y: number }[], color: string, holes: { x: number; y: number }[][] = []) => {
+      if (!points.length) return;
+      c.fillStyle = color;
+      c.beginPath();
+      for (const ring of [points, ...holes]) {
+        ring.forEach((p, i) =>
+          i ? c.lineTo(p.x * sx, p.y * sy) : c.moveTo(p.x * sx, p.y * sy),
+        );
+        c.closePath();
+      }
+      c.fill("evenodd");
+    };
+    polygon(MAP.boundary, "#899777");
+    for (const f of MAP.fields) polygon(f.points, "#547c58");
+    for (const r of MAP.roads) {
+      c.strokeStyle = "#425b50";
+      c.lineWidth = Math.max(0.45, r.width * sx);
+      c.beginPath();
+      r.points.forEach((p, i) =>
+        i ? c.lineTo(p.x * sx, p.y * sy) : c.moveTo(p.x * sx, p.y * sy),
+      );
+      c.stroke();
+    }
+    for (const b of MAP.buildings)
+      polygon(b.points, b.kind === "retail" ? "#c99668" : "#d5c7a5", b.holes);
+    c.font = "6px monospace";
+    c.fillStyle = "#244336";
+    for (const name of [
+      "Downberg Road",
+      "Hanover Park Avenue",
+      "Surran Road",
+    ]) {
+      const road = MAP.roads.find((r) => r.name === name);
+      if (road) {
+        const p = road.points[Math.floor(road.points.length / 2)];
+        c.fillText(
+          name.replace(" Road", " Rd").replace("Avenue", "Ave"),
+          p.x * sx,
+          p.y * sy,
+        );
+      }
+    }
     const target =
       this.mission.status === "active"
         ? DESTINATION
@@ -490,16 +518,16 @@ export class Neighbourhood extends Phaser.Scene {
       c.closePath();
       c.fill();
     }
-    c.font = "7px monospace";
-    c.fillStyle = "#183c31";
-    c.fillText("SHOP", 19, 66);
-    c.fillText("RANK", 75, 118);
-    c.fillText("PITCH", 155, 146);
     c.fillStyle = "#91d7cf";
     c.fillRect(this.car.x * sx - 2, this.car.y * sy - 3, 4, 6);
     c.fillStyle = "#fffbe1";
     c.beginPath();
     c.arc(this.player.x * sx, this.player.y * sy, 3, 0, Math.PI * 2);
     c.fill();
+    const coordinates = gameCoordinates(this.player.x, this.player.y);
+    this.ui.text(
+      "map-position",
+      `${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)} · N ↑`,
+    );
   }
 }

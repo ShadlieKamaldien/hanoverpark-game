@@ -1,4 +1,4 @@
-import type { SaveData } from "../config/constants";
+import { WORLD, WORLD_ID, type SaveData } from "../config/constants";
 const KEY = "hanover-park-v1";
 export function loadSave(): SaveData | null {
   try {
@@ -15,20 +15,22 @@ export function loadSave(): SaveData | null {
       )
     )
       return null;
+    if (d.worldId !== undefined && typeof d.worldId !== "string") return null;
     if (
       d.x < 0 ||
-      d.x > 2400 ||
       d.y < 0 ||
-      d.y > 1800 ||
       d.carX < 0 ||
-      d.carX > 2400 ||
       d.carY < 0 ||
-      d.carY > 1800 ||
       d.money < 0 ||
       d.health < 0 ||
       d.health > 100
     )
       return null;
+    // Changed maps respawn positions in the scene while retaining earned progress.
+    if (d.worldId === WORLD_ID && (
+      d.x > WORLD.width || d.y > WORLD.height ||
+      d.carX > WORLD.width || d.carY > WORLD.height
+    )) return null;
     return d as SaveData;
   } catch {
     return null;

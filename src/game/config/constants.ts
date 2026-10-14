@@ -1,8 +1,11 @@
-export const WORLD = { width: 2400, height: 1800 };
-export const SPAWN = { x: 470, y: 740 };
+import { MAP } from "../world/mapData";
+export const WORLD = { width: MAP.width, height: MAP.height };
+export const WORLD_ID = MAP.id;
+export const SPAWN = MAP.locations.spawn;
 export type MissionStatus = "available" | "active" | "complete";
 export interface SaveData {
   version: 1;
+  worldId?: string;
   x: number;
   y: number;
   health: number;

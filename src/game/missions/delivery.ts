@@ -1,5 +1,6 @@
 import type { MissionStatus } from "../config/constants";
-export const DESTINATION = { x: 1780, y: 510, label: "Block C · front door" };
+import { MAP } from "../world/mapData";
+export const DESTINATION = { ...MAP.locations.target, label: `${MAP.locations.target.name} · delivery point` };
 export class DeliveryMission {
   status: MissionStatus = "available";
   accept() {
@@ -14,7 +15,7 @@ export class DeliveryMission {
     return this.status === "available"
       ? "Meet Aunty Fatima at the corner shop"
       : this.status === "active"
-        ? "Deliver groceries to Block C · press E at the door"
+        ? `Deliver groceries to ${DESTINATION.name} · press E at the marker`
         : "Delivery complete! Explore the neighbourhood";
   }
 }

@@ -1,79 +1,80 @@
+import { MAP } from "../world/mapData";
+import { DESTINATION } from "../missions/delivery";
 /** Original fictional dialogue; local voice performances remain a future community contribution. */
 export const NPCS = [
   {
     name: "Aunty Fatima",
-    x: 570,
-    y: 740,
+    x: MAP.locations.fatima.x,
+    y: MAP.locations.fatima.y,
     color: 0xc8685b,
-    dialogue:
-      "Awe, Riyaad. Will you take this grocery bag to the aunty at Block C? She's waiting by the front door. Bread, milk and a few things for supper. I'll give you R150 when you're done. Thank you, my child.",
-    help: "Accept the delivery, then follow the gold diamond to Block C. Press E at the front door.",
+    dialogue: `Awe, Riyaad! Ek het die groceries by Shoprite gekry. Kan jy gou die brood en melk by die aunty in ${DESTINATION.name} aflaai? R150 vir jou moeite, my kind. Maak gou, maar kyk mooi waar jy loop, né.`,
+    help: `Follow the gold diamond to ${DESTINATION.name}. Press E at the delivery point outside the mapped building.`,
     ambient: [
-      "Howzit! What can I get you?",
-      "I've put your bread aside. Come fetch it when you're ready.",
+      "Howzit, my kind. Wat kan ek vir jou kry?",
+      "Jou brood lê hier. Kom haal dit voor jy huis toe gaan.",
     ],
   },
   {
     name: "Uncle Gatie",
-    x: 730,
-    y: 970,
+    x: MAP.locations.gatie.x,
+    y: MAP.locations.gatie.y,
     color: 0x739a9b,
     dialogue:
-      "Howzit, Riyaad. The mint hatchback's here if you need a lift. I gave it a once-over this morning. Bring it back in one piece, hey — and take it easy through the courtyards.",
+      "Hosh, Riyaad! Daai mint hatchback is reg. Ek het hom vanoggend uitgecheck. Vat hom as jy moet ry, my bru. Bring hom heel terug, né — moenie hier by die flats jaag nie.",
     help: "E to enter or exit. W / S accelerate and brake; A / D steer. Stop before getting out.",
     ambient: [
-      "Just a loose belt. We'll have you sorted.",
-      "Pass me that spanner, please, my bru.",
+      "Dis net 'n los belt. Ons sal hom nou regkry.",
+      "Gee gou daai spanner hier, my bru. Dankie.",
     ],
   },
   {
     name: "Jerome",
-    x: 1200,
-    y: 1440,
+    x: MAP.locations.jerome.x,
+    y: MAP.locations.jerome.y,
     color: 0xe6b952,
     dialogue:
-      "Town? We've still got a seat. If you're staying on the block, there's a kickabout at the field later. Go sort out Aunty's delivery first. We'll see you there. Sharp!",
-    help: "The taxi rank and community pitch are marked on your neighbourhood map.",
+      "Awe, my bru! Town, town — ons het nog plek! Jy's mos besig vandag. Gaan doen gou daai delivery; later skop ons bal daar by Downberg. Sharp, sien jou nou-nou!",
+    help: "The story taxi stop and mapped Downberg Sports Field are marked on your neighbourhood map.",
     ambient: [
-      "Town, town! One more seat!",
-      "You coming? We can wait a minute.",
+      "Town, town! Nog een plek, kom!",
+      "Kom jy saam? Ons kan gou vir jou wag.",
     ],
   },
 ];
 export const STREET_LINES = [
   {
-    x: 570,
-    y: 740,
+    x: MAP.locations.fatima.x,
+    y: MAP.locations.fatima.y,
     radius: 310,
-    speaker: "Corner shop",
+    speaker: "By Shoprite",
     lines: NPCS[0].ambient,
   },
   {
-    x: 890,
-    y: 1270,
+    x: MAP.locations.taxi.x,
+    y: MAP.locations.taxi.y,
     radius: 370,
-    speaker: "Taxi rank",
+    speaker: "Story taxi stop",
     lines: NPCS[2].ambient,
   },
   {
-    x: 1685,
-    y: 1470,
+    x: MAP.locations.pitch.x,
+    y: MAP.locations.pitch.y,
     radius: 360,
-    speaker: "At the pitch",
+    speaker: "Downberg Sports Field",
     lines: [
-      "Pass here! I'm open!",
-      "Next goal wins. Come, let's play!",
-      "Good ball! Again, again!",
+      "Pass hier, my bru! Ek's oop!",
+      "Next goal wen. Kom, ons speel!",
+      "Lekker ball! Weer, weer!",
     ],
   },
   {
-    x: 1780,
-    y: 510,
+    x: DESTINATION.x,
+    y: DESTINATION.y,
     radius: 280,
     speaker: "On the balcony",
     lines: [
-      "Bring the washing in before the wind picks up.",
-      "Tea's ready. Come upstairs when you're finished.",
+      "Bring gou die wasgoed in voor die wind optel.",
+      "Die tee is reg. Kom op as jy klaar is.",
     ],
   },
 ];

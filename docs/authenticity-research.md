@@ -1,4 +1,6 @@
-# Hanover Park authenticity research status
+# Hanover Park authenticity research status (earlier snapshot)
+
+**Update:** City records and GroundUp are now accessible. See [current verified names and map research](real-map-research.md); the original blocked-source notes below record the earlier state. The game now uses a successfully downloaded OpenStreetMap snapshot. The notes below are historical diagnostics, not the current map status.
 
 Date: 2026-10-14
 

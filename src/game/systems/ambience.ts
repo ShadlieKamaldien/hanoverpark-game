@@ -1,3 +1,4 @@
+import { MAP } from "../world/mapData";
 /** Original, synthesized ambience. No recordings, voices or external audio assets. */
 export interface AmbienceState {
   x: number;
@@ -14,9 +15,9 @@ type Bus = { gain: GainNode; pan: StereoPannerNode | null };
 
 const STORAGE_KEY = "hanover-park-audio-v1";
 const ZONES = {
-  shop: { x: 305, y: 650, radius: 620 },
-  taxi: { x: 890, y: 1270, radius: 760 },
-  pitch: { x: 1685, y: 1470, radius: 770 },
+  shop: { ...MAP.locations.shop, radius: 1100 },
+  taxi: { ...MAP.locations.taxi, radius: 900 },
+  pitch: { ...MAP.locations.pitch, radius: 1200 },
 };
 const RADIO_NOTES = [
   293.66, 369.99, 440, 369.99, 329.63, 246.94, 329.63, 293.66,

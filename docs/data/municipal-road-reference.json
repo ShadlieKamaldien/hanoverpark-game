@@ -1,0 +1,38 @@
+{
+  "title": "Hanover Park and Newfields — simplified 2015 road geography",
+  "status": "Original schematic of a small number of observed geographic facts. This is not survey GIS, a current street map, or exact building footprints.",
+  "source": {
+    "publisher": "City of Cape Town",
+    "title": "Hanover Park Public Investment Framework",
+    "date": "2015-10-22",
+    "page": 39,
+    "url": "https://www.capetown.gov.za/media/fd3puiln/hanover-park-public-investment-framework_22-october-2015.pdf",
+    "scope": "The wider Safe Node study area includes Hanover Park and Newfields, excludes Mountain View, and is labelled 356 ha in Figure 1 (page 5). This is not the census suburb boundary.",
+    "reuse": "Geographic facts selected and represented as original simplified linework. Do not copy or package source map artwork. Current municipal Open Data GIS service has not yet been downloaded."
+  },
+  "coordinates": {
+    "type": "local-original-schematic",
+    "width": 1888,
+    "height": 1343,
+    "orientation": "north approximately up",
+    "units": "schematic units; no latitude/longitude transform",
+    "referenceScale": "The source's printed 500 metre scale bar spans about 270 schematic units. Approximate distances only."
+  },
+  "roads": [
+    {"name": "Turfhall Road", "sourceLabel": "Turf Hall Road", "points": [[176,506],[271,481],[375,458],[421,453],[480,456],[544,470],[605,490],[654,507],[711,510],[759,499],[803,475],[838,438],[870,390],[904,339],[943,280],[980,228],[1023,190],[1071,158],[1118,128],[1152,106],[1190,94],[1244,91],[1382,86]]},
+    {"name": "Jan Smuts Drive", "sourceLabel": "Jan Smuts Road", "points": [[176,506],[188,581],[192,650],[213,704],[256,759],[318,831],[385,898],[441,944],[508,991],[550,1034],[579,1081],[597,1143],[613,1219]]},
+    {"name": "Jakes Gerwel Drive", "sourceLabel": "Vanguard Drive", "points": [[1382,86],[1386,231],[1390,354],[1395,493],[1405,695],[1412,796],[1432,940],[1455,1093]]},
+    {"name": "Govan Mbeki Drive", "sourceLabel": "Govan Mbeki Drive (Landsdowne Road)", "points": [[613,1219],[748,1185],[893,1157],[1040,1134],[1199,1118],[1354,1102],[1455,1093]]},
+    {"name": "Athwood Road", "sourceLabel": "Athwood Road", "points": [[777,697],[825,617],[879,529],[922,468],[973,462],[1030,463]]},
+    {"name": "Surran Road", "sourceLabel": "Surran Road", "points": [[1010,226],[1008,315],[1007,389],[1030,463],[1031,543],[1041,587]]},
+    {"name": "Hanover Park Avenue", "sourceLabel": "Hanover Park Av.", "points": [[777,697],[807,720],[834,758],[848,811],[860,878],[864,952],[884,1096],[893,1157]]},
+    {"name": "Lonedown Road", "sourceLabel": "Lonedown Road", "points": [[450,1001],[588,984],[722,968],[864,952],[1025,935],[1170,918],[1409,893]]}
+  ],
+  "importantLimitations": [
+    "These polylines preserve only major observed road relationships and curvature, with deliberate simplification.",
+    "The northern Surran segment stops where the observed path becomes ambiguous; this file does not invent a southern extension.",
+    "No flat/court names have been attached to unverified positions.",
+    "No current shop location or opening status has been established from this map.",
+    "No official geographic boundary, exact building footprint, current traffic layout, new MyCiTi works, or routing has been imported."
+  ]
+}

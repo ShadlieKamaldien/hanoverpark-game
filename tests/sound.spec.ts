@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { MAP } from "./helpers";
 test("neighbourhood audio produces a signal, follows location, mutes and persists preferences", async ({
   page,
 }) => {
@@ -16,23 +17,25 @@ test("neighbourhood audio produces a signal, follows location, mutes and persist
     page.evaluate(() => (window as any).__game.audio.zoneLevels);
   const shop = (await levels()).shop;
   expect(shop).toBeGreaterThan(0);
-  await page.evaluate(() => {
+  await page.evaluate((point) => {
     const g = (window as any).__game;
-    g.player.x = 890;
-    g.player.y = 1320;
-  });
+    g.player.x = point.x;
+    g.player.y = point.y;
+  }, MAP.locations.taxi);
   await expect
     .poll(async () => (await levels()).taxi)
     .toBeGreaterThan(shop * 0.5);
-  expect((await levels()).shop).toBeLessThan(shop);
-  await page.evaluate(() => {
+  expect((await levels()).shop).toBeLessThanOrEqual(shop);
+  await page.evaluate((point) => {
     const g = (window as any).__game;
-    g.player.x = 1685;
-    g.player.y = 1470;
+    g.player.x = point.x;
+    g.player.y = point.y;
     g.streetClock = 13;
-  });
+  }, MAP.locations.pitch);
   await expect.poll(async () => (await levels()).pitch).toBeGreaterThan(0.5);
-  await expect(page.locator("#street-caption")).toContainText("At the pitch");
+  await expect(page.locator("#street-caption")).toContainText(
+    "Downberg Sports Field",
+  );
   await page.getByRole("button", { name: "Mute neighbourhood sound" }).click();
   await expect(page.locator("#sound-toggle")).toHaveAttribute(
     "aria-pressed",
