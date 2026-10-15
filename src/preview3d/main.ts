@@ -11,11 +11,12 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Frustum } from "@babylonjs/core/Maths/math.frustum";
 import "@babylonjs/core/Culling/ray";
-import { gameCoordinates } from "../game/world/mapData";
+import { gameCoordinates, type MapPoint } from "../game/world/mapData";
+import { Collision } from "../game/systems/collision";
 import { PreviewInterface, type LightingPreset, type ViewPreset } from "./interface";
-import { BUILDINGS, FIELDS, PREVIEW, ROADS, closestStreet } from "./map";
+import { BUILDINGS, PREVIEW, SOURCE, closestStreet } from "./map";
 import { PreviewPlayer } from "./player";
-import { NeighbourhoodNpcs } from "./npcs";
+import { NeighbourhoodNpcs, type Conversation } from "./npcs";
 import { buildWorld } from "./world";
 import { buildScenery } from "./scenery";
 import { PreviewSky } from "./atmosphere";
@@ -26,6 +27,12 @@ import { CREWS } from "./crews";
 import { DriveableCar } from "./driveableCar";
 import { DrivingCamera } from "./drivingCamera";
 import { BrainClient } from "./brainClient";
+import { PLACES, SHOPRITE_APPROACH } from "./places";
+import { buildShops } from "./shopsWorld";
+import { PROPERTY_SOLIDS } from "./properties";
+import { DeliveryJob, DELIVERY_VENDOR_ID, type DeliveryActionContext } from "./delivery";
+import { NeighbourhoodMaps } from "./neighbourhoodMaps";
+import { buildDeliveryMarker } from "./deliveryMarker";
 
 const ui = new PreviewInterface();
 
@@ -41,12 +48,19 @@ function startPreview() {
   const properties = buildProperties(scene);
   const wallArt = buildMappedWallArt(scene);
   const scenery = buildScenery(scene);
+  const shops = buildShops(scene);
   const sky = new PreviewSky(scene);
   const player = new PreviewPlayer(scene);
   const npcs = new NeighbourhoodNpcs(scene);
   const brains = new BrainClient(npcs);
   const traffic = new Traffic(scene);
   const car = new DriveableCar(scene);
+  const delivery = new DeliveryJob({ mapId: SOURCE.id, pixelsPerMetre: SOURCE.projection.pixelsPerMetre,
+    collectionPoint: SHOPRITE_APPROACH,
+    vendorPosition: () => npcs.actors.find((entity) => entity.id === DELIVERY_VENDOR_ID)?.position });
+  const deliveryMarker = buildDeliveryMarker(scene);
+  const maps = new NeighbourhoodMaps(ui.minimap, ui.areaMap, properties.placements.map((property) => property.footprint));
+  const interactionCollision = new Collision([], [...BUILDINGS.map((building) => ({ points: building.points, holes: building.holes })), ...PROPERTY_SOLIDS]);
   const target = () => (car.occupied ? car.actor.root.position : player.mesh.position).add(new Vector3(0, 1.1, 0));
   const views = { street: { beta: 1.18, radius: 18 }, overview: { beta: 0.72, radius: 48 } };
   const drivingViews = { street: { beta: 1.12, radius: 12 }, overview: views.overview };
@@ -78,7 +92,7 @@ function startPreview() {
   shadows.filteringQuality = ShadowGenerator.QUALITY_LOW;
   shadows.bias = 0.003;
   shadows.normalBias = 0.02;
-  for (const mesh of [...world.shadowCasters, ...properties.shadowCasters, ...scenery.shadowCasters, ...player.shadowCasters, ...traffic.shadowCasters, ...car.shadowCasters]) shadows.addShadowCaster(mesh);
+  for (const mesh of [...world.shadowCasters, ...properties.shadowCasters, ...scenery.shadowCasters, ...shops.shadowCasters, ...player.shadowCasters, ...traffic.shadowCasters, ...car.shadowCasters]) shadows.addShadowCaster(mesh);
   // The merged body gives each neighbour a silhouette without five shadow draws.
   for (const entity of npcs.actors) shadows.addShadowCaster(entity.actor.shadowCasters[0]);
   // An explicit shadow render list otherwise submits off-screen buildings too.
@@ -122,51 +136,69 @@ function startPreview() {
     sky.setLighting(preset);
     traffic.setLighting(preset);
     car.setLighting(preset);
+    shops.setLighting(preset);
     ui.setLighting(preset);
   };
   lightScene("sunset");
 
-  const context = ui.minimap.getContext("2d")!;
-  const background = document.createElement("canvas");
-  background.width = ui.minimap.width;
-  background.height = ui.minimap.height;
-  const map = background.getContext("2d")!;
-  const bounds = PREVIEW.bounds, margin = 8;
-  const scale = Math.min((background.width - margin * 2) / bounds.w, (background.height - margin * 2) / bounds.h);
-  const ox = (background.width - bounds.w * scale) / 2, oy = (background.height - bounds.h * scale) / 2;
-  const path = (points: { x: number; y: number }[], close = false) => {
-    points.forEach((p, i) => map[i ? "lineTo" : "moveTo"](ox + (p.x - bounds.minX) * scale, oy + (p.y - bounds.minY) * scale));
-    if (close) map.closePath();
+  const vendor = () => npcs.actors.find((entity) => entity.id === DELIVERY_VENDOR_ID);
+  const objectivePosition = (): MapPoint | null => {
+    const phase = delivery.state.phase;
+    return phase === "complete" ? null : phase === "collect" ? SHOPRITE_APPROACH : vendor()?.position ?? null;
   };
-  map.fillStyle = "#273d31"; map.fillRect(0, 0, background.width, background.height);
-  map.fillStyle = "#4b6342";
-  for (const field of FIELDS) { map.beginPath(); path(field.points, true); for (const hole of field.holes ?? []) path(hole, true); map.fill("evenodd"); }
-  map.strokeStyle = "#85917b";
-  for (const road of ROADS) { map.lineWidth = Math.max(0.7, road.width * scale); map.beginPath(); path(road.points); map.stroke(); }
-  map.fillStyle = "#b0a78c";
-  for (const building of BUILDINGS) { map.beginPath(); path(building.points, true); for (const hole of building.holes ?? []) path(hole, true); map.fill("evenodd"); }
-  map.fillStyle = "#887b64";
-  for (const property of properties.placements) { map.beginPath(); path(property.footprint, true); map.fill(); }
+  const objectiveText = () => ({
+    available: "Speak to Zeem about a stock run",
+    collect: "Collect stock near Shoprite Lansdowne Corner",
+    return: "Bring the stock back to Zeem",
+    complete: "Stock delivered · R150 earned",
+  })[delivery.state.phase];
+  const deliveryFacts = () => ({
+    available: "I can offer you a stock collection near Shoprite Lansdowne Corner for R150. You have not accepted it yet.",
+    collect: "You accepted my R150 stock job. Collect the groceries at the pickup point near Shoprite Lansdowne Corner.",
+    return: "You have collected my stock. Bring it back to my stall and I will pay you R150.",
+    complete: delivery.state.vendorMemory!,
+  })[delivery.state.phase];
+  const syncDeliveryFacts = () => npcs.setKnownFact(DELIVERY_VENDOR_ID, deliveryFacts());
+  const actionContext = (point: MapPoint | undefined): DeliveryActionContext => {
+    let clearSight = !!point && Math.hypot(player.position.x - point.x, player.position.y - point.y) <= 3.5 / PREVIEW.metresPerPixel;
+    if (clearSight && point) {
+      const vehicles = new Collision([], [...traffic.solids, car.solid]);
+      const steps = Math.max(1, Math.ceil(Math.hypot(player.position.x - point.x, player.position.y - point.y)));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps, x = player.position.x + (point.x - player.position.x) * t,
+          y = player.position.y + (point.y - player.position.y) * t;
+        if (interactionCollision.blocked(x, y, 0.1) || vehicles.blocked(x, y, 0.1)) { clearSight = false; break; }
+      }
+    }
+    return { player: player.position, onFoot: !car.occupied, clearSight, active: started && !paused && !ui.mapOpen && !failed };
+  };
+  const missionConversation = (conversation: Conversation, message?: string): Conversation => {
+    if (npcs.activeNPC?.id !== DELIVERY_VENDOR_ID) return conversation;
+    const phase = delivery.state.phase;
+    const choice = phase === "available" ? { id: "delivery-accept", label: "Take the stock collection · R150" }
+      : phase === "return" ? { id: "delivery-complete", label: "Hand over the stock · collect R150" }
+      : { id: "delivery-info", label: phase === "complete" ? "About the completed job" : "Remind me where to collect" };
+    const details = phase === "available"
+      ? "Awe, my bru. Can you fetch a box of groceries from the pickup point near Shoprite Lansdowne Corner? Bring it back to my stall and I'll pay you R150."
+      : phase === "collect" ? "The stock pickup near Shoprite Lansdowne Corner is marked on your map. Step out of the car and press E at the marker to collect it."
+      : phase === "return" ? "You've got my stock. Hand it over here and we'll sort your R150."
+      : "Sharp, bru. You brought my stock back safely. Your R150 is paid, and I remember the help.";
+    return { ...conversation, text: message ?? conversation.text + "\n\n" + details, choices: [choice, ...conversation.choices] };
+  };
+  const updateMapPlaces = () => ui.setMapPlaces(PLACES.map((place) => ({ id: place.id, name: place.name,
+    kind: place.kind, insidePreview: place.inPreview,
+    distance: Math.hypot(place.point.x - player.position.x, place.point.y - player.position.y) * PREVIEW.metresPerPixel })));
   const updateLocation = () => {
-    const p = player.position, geo = gameCoordinates(p.x, p.y);
-    ui.status(closestStreet(p), `${geo.latitude.toFixed(6)}°, ${geo.longitude.toFixed(6)}°`);
-    context.drawImage(background, 0, 0);
-    context.fillStyle = "#d1d4c7";
-    for (const vehicle of traffic.vehicles) {
-      const vx = ox + (vehicle.position.x - bounds.minX) * scale, vy = oy + (vehicle.position.y - bounds.minY) * scale;
-      context.fillRect(vx - 1.3, vy - 1.3, 2.6, 2.6);
-    }
-    context.fillStyle = "#edbd59";
-    const cx = ox + (car.position.x - bounds.minX) * scale, cy = oy + (car.position.y - bounds.minY) * scale;
-    context.fillRect(cx - 2, cy - 2, 4, 4);
-    context.fillStyle = "#89c7bc";
-    for (const entity of npcs.actors) {
-      const nx = ox + (entity.position.x - bounds.minX) * scale, ny = oy + (entity.position.y - bounds.minY) * scale;
-      context.beginPath(); context.arc(nx, ny, entity === npcs.activeNPC ? 3 : 1.8, 0, Math.PI * 2); context.fill();
-    }
-    const x = ox + (p.x - bounds.minX) * scale, y = oy + (p.y - bounds.minY) * scale;
-    context.fillStyle = "#edbd59"; context.strokeStyle = "#172e26"; context.lineWidth = 2;
-    context.beginPath(); context.arc(x, y, 4, 0, Math.PI * 2); context.fill(); context.stroke();
+    const p = player.position, geo = gameCoordinates(p.x, p.y), state = delivery.state, objective = objectivePosition();
+    ui.status(closestStreet(p), geo.latitude.toFixed(6) + "°, " + geo.longitude.toFixed(6) + "°");
+    maps.draw({ player: p, people: npcs.actors.map((person) => person.position),
+      traffic: traffic.vehicles.map((vehicle) => vehicle.position), car: car.position, objective }, ui.mapOpen);
+    deliveryMarker.update(objective);
+    ui.deliveryStatus({ phase: state.phase, money: state.money, reputation: state.rep,
+      objective: objectiveText(), distance: objective ? Math.hypot(p.x - objective.x, p.y - objective.y) * PREVIEW.metresPerPixel : undefined,
+      message: state.phase === "available" ? "Collection job · R150 · M opens the map"
+        : state.phase === "return" ? "Stock is with you. Return on foot to hand it over." : undefined,
+      saveProblem: state.saveWarning ?? undefined });
     const crewState = npcs.crewState;
     const crew = CREWS.find((entry) => entry.id === crewState.affiliation);
     player.setCrewColour(crew?.colour ?? null);
@@ -203,10 +235,10 @@ function startPreview() {
     ui.closeDialogue();
     ui.clearChat();
     ui.setNpcBrain(null);
-    if (started && !paused && !failed) camera.attachControl(ui.canvas, true);
+    if (started && !paused && !failed && !ui.mapOpen) camera.attachControl(ui.canvas, true);
   };
   const openConversation = () => {
-    if (!started || paused || failed || ui.dialogueOpen || car.occupied) return;
+    if (!started || paused || failed || ui.dialogueOpen || ui.mapOpen || car.occupied) return;
     const conversation = npcs.interact(player.position);
     if (!conversation) return;
     keys.clear();
@@ -218,21 +250,24 @@ function startPreview() {
     camera.inertialBetaOffset = 0;
     camera.inertialRadiusOffset = 0;
     ui.prompt(null);
-    ui.dialogue(conversation);
+    ui.dialogue(missionConversation(conversation));
     updateNpcPlan();
   };
   const interactionPrompt = () => {
-    if (!started || paused || failed || ui.dialogueOpen) return null;
+    if (!started || paused || failed || ui.dialogueOpen || ui.mapOpen) return null;
     if (car.occupied) return "E · Exit hatchback";
+    if (delivery.canCollect(actionContext(SHOPRITE_APPROACH))) return "E · Collect Zeem's stock";
     if (car.canEnter(player.position)) return "E · Drive hatchback";
     const neighbour = npcs.nearest(player.position);
     return neighbour ? `E · Speak to ${neighbour.name}` : null;
   };
   const interact = () => {
-    if (!started || paused || failed || ui.dialogueOpen) return;
+    if (!started || paused || failed || ui.dialogueOpen || ui.mapOpen) return;
     if (car.occupied) {
       const exit = car.exit(traffic.solids, npcs.actors.map((entity) => entity.position));
       if (exit) { keys.clear(); player.leaveVehicle(exit); recenter(); }
+    } else if (delivery.collect(actionContext(SHOPRITE_APPROACH))) {
+      keys.clear(); syncDeliveryFacts();
     } else if (car.canEnter(player.position) && car.enter(player.position)) {
       keys.clear(); player.ride(car.position, car.heading); recenter();
     } else openConversation();
@@ -240,19 +275,46 @@ function startPreview() {
     ui.prompt(interactionPrompt());
   };
   ui.onInteract = interact;
+  ui.onMapOpen = () => {
+    keys.clear(); chatSerial++; brains.suspend();
+    stopCameraDrift(); orbitHeld = false; orbitGrace = 0;
+    camera.detachControl(); ui.prompt(null); updateMapPlaces();
+    maps.draw({ player: player.position, people: npcs.actors.map((person) => person.position),
+      traffic: traffic.vehicles.map((vehicle) => vehicle.position), car: car.position, objective: objectivePosition() }, true);
+  };
+  ui.onMapClose = () => {
+    keys.clear(); stopCameraDrift(); orbitHeld = false; orbitGrace = 0;
+    if (started && !paused && !failed && !ui.dialogueOpen) camera.attachControl(ui.canvas, true);
+    updateLocation(); ui.prompt(interactionPrompt());
+  };
   ui.onDialogueChoice = (id) => {
     keys.clear();
     chatSerial++;
     brains.cancelChat();
     ui.chatPending(false);
+    if (id.startsWith("delivery-") && npcs.activeNPC?.id === DELIVERY_VENDOR_ID) {
+      let message: string | undefined;
+      const context = actionContext(vendor()?.position);
+      if (id === "delivery-accept") {
+        message = delivery.accept(context) ? "Sharp. The stock pickup near Shoprite Lansdowne Corner is marked on your map. Bring it back here for R150."
+          : "Come a little closer to the stall before we sort out the stock run.";
+      } else if (id === "delivery-complete") {
+        message = delivery.complete(context) ? "Lekker, my bru. Stock is sorted. Here's your R150. I remember who helped me."
+          : "Bring the stock right up to the stall on foot and I'll pay you.";
+      }
+      syncDeliveryFacts();
+      if (npcs.activeConversation) ui.dialogue(missionConversation(npcs.activeConversation, message));
+      updateLocation();
+      return;
+    }
     const conversation = npcs.choose(id);
-    if (conversation) { ui.dialogue(conversation); updateNpcPlan(); }
+    if (conversation) { ui.dialogue(missionConversation(conversation)); updateNpcPlan(); }
     else closeConversation();
   };
   ui.onDialogueClose = closeConversation;
   ui.onChatSubmit = async (text) => {
     const entity = npcs.activeNPC;
-    if (!started || paused || failed || disposed || !ui.dialogueOpen || !entity) return;
+    if (!started || paused || failed || disposed || ui.mapOpen || !ui.dialogueOpen || !entity) return;
     const serial = ++chatSerial;
     ui.chatPending(true);
     try {
@@ -275,7 +337,7 @@ function startPreview() {
     if (value) brains.suspend();
     stopCameraDrift();
     orbitHeld = false;
-    if (value) { closeConversation(); ui.prompt(null); }
+    if (value) { ui.closeMap(); closeConversation(); ui.prompt(null); }
     if (value) camera.detachControl(); else camera.attachControl(ui.canvas, true);
     ui.pause(value);
   };
@@ -301,10 +363,17 @@ function startPreview() {
     if (!started || failed || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.code === "Escape" && !event.repeat) {
       event.preventDefault();
-      if (ui.dialogueOpen) closeConversation(); else setPaused(!paused);
+      if (ui.mapOpen) ui.closeMap();
+      else if (ui.dialogueOpen) closeConversation(); else setPaused(!paused);
       return;
     }
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.code === "KeyM" && !event.repeat) {
+      event.preventDefault();
+      if (ui.mapOpen) ui.closeMap(); else if (!paused) ui.openMap();
+      return;
+    }
+    if (ui.mapOpen) return;
     if (event.code === "KeyE" && !event.repeat) { event.preventDefault(); interact(); return; }
     if (!paused && !ui.dialogueOpen && movementKeys.has(event.code)) { event.preventDefault(); keys.add(event.code); }
   };
@@ -312,7 +381,7 @@ function startPreview() {
   const blur = () => { keys.clear(); setPaused(true); };
   const visibility = () => { if (document.hidden) blur(); };
   const resize = () => engine.resize();
-  const orbitStart = () => { if (started && !paused && !ui.dialogueOpen) { orbitHeld = true; orbitGrace = 2; } };
+  const orbitStart = () => { if (started && !paused && !ui.dialogueOpen && !ui.mapOpen) { orbitHeld = true; orbitGrace = 2; } };
   const orbitEnd = () => { if (orbitHeld) { orbitHeld = false; orbitGrace = 2; } };
   window.addEventListener("keydown", keydown);
   window.addEventListener("keyup", keyup);
@@ -337,19 +406,19 @@ function startPreview() {
   scene.whenReadyAsync().then(() => {
     if (!disposed && !failed) { window.clearTimeout(timeout); ui.ready(); }
   }).catch(fail);
-  updateLocation();
+  syncDeliveryFacts(); updateMapPlaces(); updateLocation();
   engine.runRenderLoop(() => {
     if (disposed || failed) return;
     try {
       const dt = Math.min(engine.getDeltaTime() / 1000, 0.1);
-      const frozen = !started || paused || ui.dialogueOpen;
+      const frozen = !started || paused || ui.dialogueOpen || ui.mapOpen;
       const pedestrians = npcs.actors.map((entity) => entity.position);
       traffic.update(dt, player.position, pedestrians, frozen, [car.solid]);
       car.update(dt, keys, traffic.solids, pedestrians, frozen);
       const movingSolids = [...traffic.solids, car.solid];
       player.setTrafficSolids(movingSolids);
       npcs.setTrafficSolids(movingSolids);
-      if (started && !paused) {
+      if (started && !paused && !ui.mapOpen) {
         if (!ui.dialogueOpen) {
           if (car.occupied) {
             player.ride(car.position, car.heading);
@@ -364,7 +433,7 @@ function startPreview() {
         camera.setTarget(Vector3.Lerp(camera.target, target(), Math.min(1, dt * 12)), false, false, true);
       }
       drivingCamera.update(dt, !frozen && car.occupied);
-      npcs.update(dt, player.position, !started || paused, car.occupied);
+      npcs.update(dt, player.position, !started || paused || ui.mapOpen, car.occupied);
       brains.update(dt, player.position, !frozen);
       sun.position.copyFrom(target().subtract(sun.direction.scale(100)));
       Frustum.GetPlanesToRef(shadows.getTransformMatrix(), shadowFrustum);
@@ -381,7 +450,9 @@ function startPreview() {
     } catch (error) { fail(error); }
   });
   if (import.meta.env.DEV) {
-    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, traffic, car, brains, get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
+    Object.assign(window, { __preview: { scene, engine, camera, player, world, scenery, npcs, properties, wallArt, traffic, car, brains,
+      delivery, places: PLACES, pickup: SHOPRITE_APPROACH, shops,
+      get paused() { return paused; }, get lightingPreset() { return lightingPreset; }, get viewPreset() { return viewPreset; } } });
   }
   const pagehide = (event: PageTransitionEvent) => {
     if (event.persisted) blur();
@@ -400,7 +471,7 @@ function startPreview() {
     window.removeEventListener("pointercancel", orbitEnd);
     document.removeEventListener("visibilitychange", visibility);
     window.removeEventListener("pagehide", pagehide);
-    brains.dispose(); drivingCamera.dispose(); car.dispose(); traffic.dispose(); npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
+    deliveryMarker.dispose(); shops.dispose(); brains.dispose(); drivingCamera.dispose(); car.dispose(); traffic.dispose(); npcs.dispose(); player.dispose(); properties.dispose(); scene.dispose(); engine.dispose();
   };
   window.addEventListener("pagehide", pagehide);
   if (import.meta.hot) import.meta.hot.dispose(dispose);

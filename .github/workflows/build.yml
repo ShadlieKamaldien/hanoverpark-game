@@ -15,5 +15,6 @@ jobs:
       - run: python3 tests/setup_azure_npc_brains_test.py
       - run: npm run build
       - run: npm run test:api
+      - run: npm run test:state
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test

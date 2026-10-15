@@ -105,7 +105,7 @@ export class BrainClient {
     const received = this.cooldownUntil > Date.now() ? null : await this.request(npcId, "chat", context, text);
     // A closed conversation cannot leave a memory, change a goal or update another speaker.
     if (this.disposed || serial !== this.chatSerial) return this.localReply(npcId, text, context);
-    const reply = received?.reply ?? this.localReply(npcId, text, context);
+    const reply = received?.reply.source === "llm" ? received.reply : this.localReply(npcId, text, context);
     this.npcs.applyBrainDecision(npcId, reply);
     this.npcs.rememberChat(npcId, text, reply.say);
     return reply;

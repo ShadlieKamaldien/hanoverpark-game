@@ -226,6 +226,7 @@ export class NeighbourhoodNpcs {
   private readonly fieldCollision = new Collision([], FIELDS.map((field) => ({ points: field.points, holes: field.holes })));
   private readonly scripts = new Map<string, Definition>();
   private readonly brains = new Map<string, NpcBrain>();
+  private readonly knownFacts = new Map<string, string>();
   private readonly goalMovement = new Map<string, GoalMovement>();
   private readonly crewMovement = new Map<string, CrewMovement>();
   private readonly navigation = new CrewNavigation((point) => this.clear(point, BODY_RADIUS + 0.3),
@@ -309,7 +310,8 @@ export class NeighbourhoodNpcs {
       events.push("crew_routine_override");
     if (brain.stage === "waiting") events.push("routine_waiting");
     return { profile: { ...brain.profile, goals: brain.profile.goals.map((goal) => ({ ...goal })) },
-      currentGoal: brain.goal.id, needs: { ...brain.needs }, memory: [...brain.memory],
+      currentGoal: brain.goal.id, needs: { ...brain.needs },
+      memory: this.knownFacts.has(npcId) ? [...brain.memory.slice(-5), this.knownFacts.get(npcId)!] : [...brain.memory],
       recentChat: brain.recentChat.map((turn) => ({ ...turn })), nearbyEvents: events.slice(0, 4) };
   }
 
@@ -319,7 +321,16 @@ export class NeighbourhoodNpcs {
   }
 
   localBrainReply(npcId: string, userText: string) {
+    const fact = this.knownFacts.get(npcId);
+    if (fact && /remember|delivery|stock|job|help/i.test(userText)) return "Awe. " + fact;
     return this.brains.get(npcId)?.localReply(userText) ?? "Hoesit. Let's catch up another time.";
+  }
+
+  /** Only game-owned, validated events supply these facts; model replies cannot write them. */
+  setKnownFact(npcId: string, fact: string | null) {
+    if (this.disposed || !this.brains.has(npcId)) return;
+    if (!fact) { this.knownFacts.delete(npcId); return; }
+    this.knownFacts.set(npcId, fact.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 160));
   }
 
   rememberChat(npcId: string, userText: string, reply: string) {
@@ -433,6 +444,7 @@ export class NeighbourhoodNpcs {
     this.disposed = true;
     for (const entity of this.actors) entity.actor.dispose();
     this.brains.clear();
+    this.knownFacts.clear();
     this.goalMovement.clear();
     this.crewMovement.clear();
     this.trafficCollision = null;

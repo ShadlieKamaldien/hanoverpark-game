@@ -27,6 +27,23 @@ export interface NpcBrainStatus {
   source: "local" | "llm";
   say?: string;
 }
+export interface MapPlace {
+  id: string;
+  name: string;
+  kind: string;
+  insidePreview: boolean;
+  distance?: number;
+  detail?: string;
+}
+export interface DeliveryStatus {
+  phase: string;
+  money: number;
+  reputation: number;
+  objective: string;
+  distance?: number;
+  message?: string;
+  saveProblem?: string;
+}
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -38,6 +55,7 @@ function element<T extends HTMLElement>(id: string): T {
 export class PreviewInterface {
   readonly canvas = element<HTMLCanvasElement>("preview-canvas");
   readonly minimap = element<HTMLCanvasElement>("preview-minimap");
+  readonly areaMap = element<HTMLCanvasElement>("preview-area-map");
   readonly startButton = element<HTMLButtonElement>("preview-start-button");
 
   onStart: (() => void) | null = null;
@@ -50,6 +68,8 @@ export class PreviewInterface {
   onDialogueChoice: ((id: string) => void) | null = null;
   onDialogueClose: (() => void) | null = null;
   onChatSubmit: ((text: string) => void) | null = null;
+  onMapOpen: (() => void) | null = null;
+  onMapClose: (() => void) | null = null;
 
   private readonly startOverlay = element<HTMLElement>("preview-start");
   private readonly pauseOverlay = element<HTMLElement>("preview-pause");
@@ -68,6 +88,17 @@ export class PreviewInterface {
   private readonly vehicleGear = element<HTMLElement>("preview-vehicle-gear");
   private readonly vehicleMessage = element<HTMLElement>("preview-vehicle-message");
   private readonly controls = element<HTMLElement>("preview-controls");
+  private readonly mapOverlay = element<HTMLElement>("preview-area-map-dialog");
+  private readonly mapButton = element<HTMLButtonElement>("preview-map-button");
+  private readonly mapCloseButton = element<HTMLButtonElement>("preview-map-close");
+  private readonly mapPlaces = element<HTMLOListElement>("preview-map-places");
+  private readonly deliveryPanel = element<HTMLElement>("preview-delivery-status");
+  private readonly deliveryObjective = element<HTMLElement>("preview-delivery-objective");
+  private readonly deliveryDistance = element<HTMLElement>("preview-delivery-distance");
+  private readonly deliveryMessage = element<HTMLElement>("preview-delivery-message");
+  private readonly wallet = element<HTMLElement>("preview-wallet");
+  private readonly vendorReputation = element<HTMLElement>("preview-vendor-reputation");
+  private readonly saveProblem = element<HTMLElement>("preview-save-problem");
   private readonly resumeButton = element<HTMLButtonElement>("preview-resume-button");
   private readonly interactPrompt = element<HTMLElement>("preview-interact-prompt");
   private readonly interactButton = element<HTMLButtonElement>("preview-interact");
@@ -102,6 +133,30 @@ export class PreviewInterface {
     this.startButton.addEventListener("click", () => this.onStart?.());
     element<HTMLButtonElement>("preview-pause-button").addEventListener("click", () => this.onPause?.());
     this.resumeButton.addEventListener("click", () => this.onResume?.());
+    this.mapButton.addEventListener("click", () => this.openMap());
+    element<HTMLButtonElement>("preview-minimap-expand").addEventListener("click", () => this.openMap());
+    this.mapCloseButton.addEventListener("click", () => this.closeMap());
+    this.mapOverlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" || (event.key.toLowerCase() === "m" && !event.altKey && !event.ctrlKey && !event.metaKey)) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.closeMap();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(this.mapOverlay.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), a[href], [tabindex='0']",
+      )).filter((node) => !node.closest("[hidden], [inert]") && node.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    });
     this.interactButton.addEventListener("click", () => {
       if (!this.interactButton.disabled) this.onInteract?.();
     });
@@ -185,6 +240,7 @@ export class PreviewInterface {
 
   pause(paused: boolean): void {
     if (!this.started || !this.errorOverlay.hidden) return;
+    if (paused && this.mapOpen) this.closeMap();
     if (paused && this.dialogueOpen) {
       this.onDialogueClose?.();
       this.closeDialogue();
@@ -234,9 +290,9 @@ export class PreviewInterface {
       this.hud.dataset.driving = String(state.driving);
       const controls: [string, string][] = state.driving
         ? [["W / S", "Accelerate / brake + reverse"], ["A / D", "Steer"], ["SPACE", "Brake"],
-          ["E", "Exit"], ["DRAG", "Orbit"], ["WHEEL", "Zoom"], ["ESC", "Pause"]]
+          ["E", "Exit"], ["M", "Map"], ["DRAG", "Orbit"], ["WHEEL", "Zoom"], ["ESC", "Pause"]]
         : [["WASD / ARROWS", "Walk"], ["SHIFT", "Sprint"], ["E", "Greet / enter car"],
-          ["DRAG", "Orbit"], ["WHEEL", "Zoom"], ["ESC", "Pause"]];
+          ["M", "Map"], ["DRAG", "Orbit"], ["WHEEL", "Zoom"], ["ESC", "Pause"]];
       this.controls.replaceChildren(...controls.map(([key, action]) => {
         const label = document.createElement("span");
         const shortcut = document.createElement("b");
@@ -287,7 +343,7 @@ export class PreviewInterface {
   }
 
   dialogue(conversation: Conversation): void {
-    if (!this.started || this.paused || !this.errorOverlay.hidden) return;
+    if (!this.started || this.paused || this.mapOpen || !this.errorOverlay.hidden) return;
     this.dialogueSpeaker.textContent = conversation.speaker;
     this.dialogueText.textContent = conversation.text;
     this.dialogueChoices.replaceChildren();
@@ -319,6 +375,91 @@ export class PreviewInterface {
 
   get dialogueOpen(): boolean {
     return !this.dialogueOverlay.hidden;
+  }
+
+  openMap(): void {
+    if (!this.started || this.paused || this.mapOpen || !this.errorOverlay.hidden) return;
+    if (this.dialogueOpen) {
+      this.onDialogueClose?.();
+      this.closeDialogue();
+    }
+    this.onMapOpen?.();
+    this.mapOverlay.hidden = false;
+    this.mapButton.setAttribute("aria-expanded", "true");
+    this.hud.inert = true;
+    this.canvas.inert = true;
+    document.documentElement.dataset.previewState = "map";
+    this.mapCloseButton.focus({ preventScroll: true });
+  }
+
+  closeMap(): void {
+    if (!this.mapOpen) return;
+    this.mapOverlay.hidden = true;
+    this.mapButton.setAttribute("aria-expanded", "false");
+    this.hud.inert = this.paused || this.dialogueOpen;
+    this.canvas.inert = this.paused || this.dialogueOpen;
+    document.documentElement.dataset.previewState = this.paused ? "paused" : this.dialogueOpen ? "dialogue" : "playing";
+    this.onMapClose?.();
+    if (this.started && !this.paused && !this.dialogueOpen && this.errorOverlay.hidden) {
+      this.canvas.focus({ preventScroll: true });
+    }
+  }
+
+  get mapOpen(): boolean {
+    return !this.mapOverlay.hidden;
+  }
+
+  setMapPlaces(places: readonly MapPlace[]): void {
+    this.mapPlaces.replaceChildren(...places.map((place, index) => {
+      const item = document.createElement("li");
+      item.dataset.placeId = place.id;
+      item.dataset.insidePreview = String(place.insidePreview);
+      const number = document.createElement("span");
+      number.className = "preview-map-place-number";
+      number.textContent = String(index + 1);
+      number.setAttribute("aria-hidden", "true");
+      const body = document.createElement("div");
+      const name = document.createElement("h3");
+      name.textContent = place.name;
+      const kind = document.createElement("p");
+      kind.className = "preview-map-place-kind";
+      const kinds: Record<string, string> = { supermarket: "Supermarket", pharmacy: "Pharmacy", fuel: "Fuel", fast_food: "Takeaway", pitch: "Sports field" };
+      kind.textContent = kinds[place.kind] ?? place.kind.replaceAll("_", " ");
+      const area = document.createElement("p");
+      area.className = "preview-map-place-area";
+      area.textContent = place.insidePreview ? "In current 3D area" : "Outside current 3D area";
+      if (place.insidePreview && Number.isFinite(place.distance)) {
+        area.textContent += ` · ${Math.round(Math.max(0, place.distance!))} m away`;
+      }
+      body.append(name, kind, area);
+      if (place.detail?.trim()) {
+        const detail = document.createElement("p");
+        detail.className = "preview-map-place-detail";
+        detail.textContent = place.detail;
+        body.append(detail);
+      }
+      item.append(number, body);
+      return item;
+    }));
+  }
+
+  deliveryStatus(state: DeliveryStatus): void {
+    this.deliveryPanel.dataset.phase = state.phase;
+    const money = `R${Number.isFinite(state.money) ? Math.max(0, state.money).toFixed(0) : "0"}`;
+    if (this.wallet.textContent !== money) this.wallet.textContent = money;
+    const reputation = `${Number.isFinite(state.reputation) ? Math.trunc(state.reputation) : 0}`;
+    if (this.vendorReputation.textContent !== reputation) this.vendorReputation.textContent = reputation;
+    if (this.deliveryObjective.textContent !== state.objective) this.deliveryObjective.textContent = state.objective;
+    const hasDistance = Number.isFinite(state.distance);
+    this.deliveryDistance.hidden = !hasDistance;
+    const distance = hasDistance ? `${Math.round(Math.max(0, state.distance!))} m to objective` : "";
+    if (this.deliveryDistance.textContent !== distance) this.deliveryDistance.textContent = distance;
+    const message = state.message?.trim() ?? "";
+    this.deliveryMessage.hidden = !message;
+    if (this.deliveryMessage.textContent !== message) this.deliveryMessage.textContent = message;
+    const problem = state.saveProblem?.trim() ?? "";
+    this.saveProblem.hidden = !problem;
+    if (this.saveProblem.textContent !== problem) this.saveProblem.textContent = problem;
   }
 
   setNpcBrain(state: NpcBrainStatus | null): void {
@@ -366,6 +507,7 @@ export class PreviewInterface {
   }
 
   error(message?: string): void {
+    this.closeMap();
     this.closeDialogue();
     this.canvas.setAttribute("aria-busy", "false");
     this.startOverlay.hidden = true;

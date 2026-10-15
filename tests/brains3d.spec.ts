@@ -211,6 +211,12 @@ test("eighteen real routines travel, satisfy needs and finish duties while mocke
   await beginSample(page); await start(page);
   await seconds(page, 32, false, 180_000);
   const sample = await endSample(page);
+  expect(requests).toHaveLength(2);
+  await expect.poll(() => page.evaluate(() => (window as any).__preview.brains.status.state)).toBe("live");
+  // Historical snapshot checks are CPU-heavy in Node. Settle both mocks and
+  // pause the real game so those checks cannot starve a later live fetch.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("html")).toHaveAttribute("data-preview-state", "paused");
   expect(sample.frames.length).toBeGreaterThan(30);
   const carmen = sample.frames.map((frame) => ({ person: frame.people.find((person) => person.id === "jogger_carmen")!,
     brain: frame.brains.find((brain) => brain.npcId === "jogger_carmen")! }));

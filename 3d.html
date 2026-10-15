@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#142820" />
-    <meta name="description" content="Explore mapped Hanover Park streets and original flats in a playable 3D preview." />
+    <meta name="description" content="Explore mapped Hanover Park streets, find local stores and take on a neighbourhood delivery in 3D." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Hanover Park • 3D Preview</title>
   </head>
@@ -35,6 +35,13 @@
             <p class="preview-vehicle-speed"><b id="preview-vehicle-speed">0</b><span>km/h</span></p>
             <p id="preview-vehicle-message">Stop before stepping out.</p>
           </section>
+          <section id="preview-delivery-status" class="preview-delivery-status" data-phase="available" aria-label="Delivery and wallet">
+            <div class="preview-delivery-heading"><span class="preview-eyebrow">NEIGHBOURHOOD JOB</span><span id="preview-wallet" aria-label="Your money">R0</span></div>
+            <h2 id="preview-delivery-objective">Speak to Nazeem about a delivery.</h2>
+            <div class="preview-delivery-detail"><span id="preview-delivery-distance" hidden></span><span>Vendor rep <b id="preview-vendor-reputation">0</b></span></div>
+            <p id="preview-delivery-message" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+            <p id="preview-save-problem" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+          </section>
           <div class="preview-actions">
             <fieldset class="preview-lighting preview-views">
               <legend>VIEW</legend>
@@ -47,32 +54,34 @@
               <button type="button" data-lighting="sunset" aria-pressed="true">SUNSET</button>
               <button type="button" data-lighting="night" aria-pressed="false">NIGHT</button>
             </fieldset>
+            <button id="preview-map-button" class="preview-small-button" type="button" aria-haspopup="dialog" aria-controls="preview-area-map-dialog" aria-expanded="false">MAP <span>M</span></button>
             <button id="preview-recenter" class="preview-small-button" type="button" aria-label="Recenter the camera on your character">RECENTER</button>
             <button id="preview-pause-button" class="preview-small-button" type="button" aria-label="Pause the 3D preview">PAUSE <span>II</span></button>
           </div>
           <div id="preview-interact-prompt" class="preview-interact-prompt" hidden>
             <button id="preview-interact" type="button" disabled>E · Greet a neighbour</button>
           </div>
-          <p id="preview-controls" class="preview-controls"><span><b>WASD / ARROWS</b> Walk</span><span><b>SHIFT</b> Sprint</span><span><b>E</b> Greet / enter car</span><span><b>DRAG</b> Orbit</span><span><b>WHEEL</b> Zoom</span><span><b>ESC</b> Pause</span></p>
+          <p id="preview-controls" class="preview-controls"><span><b>WASD / ARROWS</b> Walk</span><span><b>SHIFT</b> Sprint</span><span><b>E</b> Greet / enter car</span><span><b>M</b> Map</span><span><b>DRAG</b> Orbit</span><span><b>WHEEL</b> Zoom</span><span><b>ESC</b> Pause</span></p>
           <aside class="preview-map" aria-label="Neighbourhood minimap">
             <div class="preview-map-heading"><span>HANOVER PARK</span><span>N ↑</span></div>
             <canvas id="preview-minimap" width="220" height="180" aria-label="Minimap showing the mapped streets and your position"></canvas>
+            <div class="preview-minimap-key" aria-label="Map legend"><span><i class="preview-key-shop" aria-hidden="true"></i> Stores</span><span><i class="preview-key-objective" aria-hidden="true"></i> Job</span><button id="preview-minimap-expand" type="button" aria-haspopup="dialog">M · Full map</button></div>
             <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
           </aside>
-          <p class="preview-map-note">Available mapped buildings · Original architecture</p>
+          <p class="preview-map-note">Mapped streets &amp; stores · Original architecture</p>
           <p class="preview-keyboard-note">Keyboard and mouse needed for this preview.</p>
         </div>
         <section id="preview-start" class="preview-overlay" aria-labelledby="preview-start-title">
           <div class="preview-menu">
             <span class="preview-eyebrow">3D PREVIEW · DOWNBERG ROAD</span>
             <h1 id="preview-start-title">THE FLATS.<br /><span>ANOTHER ANGLE.</span></h1>
-            <p class="preview-intro">Explore the flats and courtyards around Downberg Road, greet the neighbours or take the parked hatchback for a drive. Everyone has something to get done; stop for a chat and hear their plans.</p>
+            <p class="preview-intro">Explore Downberg Road on foot or in the parked hatchback. Find mapped stores, chat to neighbours and ask Nazeem for a delivery job. Open the map to see Shoprite and the wider neighbourhood.</p>
             <p id="preview-loading" class="preview-loading" role="status">Getting the neighbourhood ready…</p>
             <button id="preview-start-button" class="preview-primary" type="button" disabled>ENTER 3D PREVIEW <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
-            <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint · <b>E</b> Greet / enter car<br />Driving: <b>W / S</b> Accelerate / brake + reverse · <b>A / D</b> Steer<br /><b>SPACE</b> Brake · <b>E</b> Exit when stopped · <b>ESC</b> Pause<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom</p>
+            <p class="preview-start-controls"><b>WASD / ARROWS</b> Walk · <b>SHIFT</b> Sprint · <b>E</b> Greet / collect / enter car<br />Driving: <b>W / S</b> Accelerate / brake + reverse · <b>A / D</b> Steer<br /><b>SPACE</b> Brake · <b>E</b> Exit when stopped · <b>M</b> Map · <b>ESC</b> Pause<br /><b>DRAG</b> Orbit · <b>WHEEL</b> Zoom</p>
             <p class="preview-keyboard-note">Keyboard and mouse needed for this preview.</p>
-            <p class="preview-source-note">Real mapped streets. Original architecture, characters and fictional crews.<br />Watch traffic. Talk to crew contacts to join or stay neutral.</p>
+            <p class="preview-source-note">Real mapped streets and places. Original architecture, characters and fictional crews.<br />Delivery progress, money and vendor reputation save in this browser.<br />The map shows which stores are outside the current 3D area.</p>
           </div>
           <div class="preview-postcard" aria-hidden="true"><span>CAPE TOWN, SOUTH AFRICA</span><b>DOWNBERG ROAD<br />HANOVER PARK</b><small>33°59′ S · 18°31′ E</small></div>
           <a class="preview-start-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
@@ -81,10 +90,30 @@
           <div class="preview-menu preview-compact-menu">
             <span class="preview-eyebrow">TAKE A MOMENT</span>
             <h1 id="preview-pause-title">PAUSED.</h1>
-            <p class="preview-intro">The street is waiting. Your car, traffic and crew pursuits pause with you.</p>
+            <p class="preview-intro">The street is waiting. Your car, traffic, neighbours and crew pursuits pause with you. Your delivery progress saves in this browser.</p>
             <button id="preview-resume-button" class="preview-primary" type="button">CONTINUE EXPLORING <span>→</span></button>
             <a class="preview-secondary" href="/">PLAY 2D GAME <span>→</span></a>
-            <p class="preview-source-note">On foot: WASD / arrows to walk · Shift to sprint · E to greet / enter car<br />Driving: W / S to accelerate / brake + reverse · A / D to steer<br />Space to brake · E to exit when stopped · Esc to resume<br />Drag to orbit · Wheel to zoom</p>
+            <p class="preview-source-note">On foot: WASD / arrows to walk · Shift to sprint · E to greet / collect / enter car<br />Driving: W / S to accelerate / brake + reverse · A / D to steer<br />Space to brake · E to exit when stopped · M for map · Esc to resume<br />Drag to orbit · Wheel to zoom</p>
+          </div>
+        </section>
+        <section id="preview-area-map-dialog" class="preview-area-map-overlay" role="dialog" aria-modal="true" aria-labelledby="preview-area-map-title" aria-describedby="preview-area-map-description" hidden>
+          <div class="preview-area-map-card">
+            <header class="preview-area-map-header">
+              <div><span class="preview-eyebrow">KNOW YOUR NEIGHBOURHOOD</span><h2 id="preview-area-map-title">HANOVER PARK</h2></div>
+              <button id="preview-map-close" class="preview-small-button" type="button">BACK TO THE STREET <span>ESC</span></button>
+            </header>
+            <p id="preview-area-map-description">Mapped shops, services and streets. The outlined section is the current playable 3D area; places beyond it appear at their mapped positions.</p>
+            <div class="preview-area-map-body">
+              <div class="preview-area-map-picture">
+                <canvas id="preview-area-map" width="900" height="720" role="img" aria-label="Map of Hanover Park showing numbered places, your position and the current playable 3D area. The place list gives every mapped name and its availability."></canvas>
+                <ul class="preview-area-map-legend" aria-label="Map legend"><li><i class="preview-key-shop" aria-hidden="true"></i> Mapped place</li><li><i class="preview-key-player" aria-hidden="true"></i> You</li><li><i class="preview-key-objective" aria-hidden="true"></i> Delivery objective</li><li><i class="preview-key-area" aria-hidden="true"></i> Current 3D area</li></ul>
+              </div>
+              <section class="preview-map-place-section" aria-label="Mapped places" tabindex="0">
+                <h3>PLACES ON THE MAP</h3>
+                <ol id="preview-map-places" class="preview-map-places"></ol>
+              </section>
+            </div>
+            <footer class="preview-area-map-footer"><span>Street activity pauses while the map is open. M or Esc to return.</span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></footer>
           </div>
         </section>
         <section id="preview-dialogue" class="preview-dialogue-overlay" role="dialog" aria-modal="true" aria-labelledby="preview-dialogue-speaker" aria-describedby="preview-dialogue-text" hidden>
