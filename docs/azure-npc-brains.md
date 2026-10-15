@@ -54,6 +54,8 @@ bash scripts/setup-azure-npc-brains.sh \
 
 `--model-version VERSION` pins an available version. A different `--model` must support the Azure OpenAI v1 Responses API and strict JSON structured outputs used by the server. The script checks deployment availability, not every model's API capabilities. `bash scripts/setup-azure-npc-brains.sh --help` lists all options.
 
+Azure response JSON is read from a private temporary directory that is removed on success or failure. Large model catalogues are never passed through environment variables or command arguments. If an earlier version stopped with `Argument list too long`, download the latest script and rerun with the same options to reuse the resource already created.
+
 Rerunning setup reuses a matching resource and deployment. It preserves an existing deployment's version and capacity, and refuses a conflicting resource kind, region, model, explicit model version or explicit SKU. It registers the Cognitive Services provider if needed, waits for deployment readiness, and merges these production API settings with the Static Web App's existing settings:
 
 | Setting | Purpose |
@@ -79,5 +81,7 @@ az staticwebapp appsettings delete \
 ```
 
 The OpenAI resource/deployment is retained; deleting the credential does not delete or resize Azure resources. If setup stops after resource creation but before deployment, rerun with the same resource name once quota/availability is resolved. No live Azure resource creation or billed inference was performed while preparing this script; checks use mocked CLI responses.
+
+Run the five offline setup regression tests with `python3 tests/setup_azure_npc_brains_test.py`. They exercise the real Bash/Python script against a mocked Azure CLI, including multi-megabyte catalogues, resource reuse, quota handling and temporary-file cleanup. CI runs these alongside the game checks.
 
 References: [Azure CLI Cognitive Services account](https://learn.microsoft.com/cli/azure/cognitiveservices/account), [model deployment CLI](https://learn.microsoft.com/cli/azure/cognitiveservices/account/deployment), [Static Web App API settings](https://learn.microsoft.com/azure/static-web-apps/application-settings), [Azure OpenAI deployment types](https://learn.microsoft.com/azure/ai-foundry/openai/how-to/deployment-types), [Azure OpenAI quotas](https://learn.microsoft.com/azure/ai-foundry/openai/quotas-limits), and [Azure budgets](https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets). The script's model/SKU/quota resolution follows the [official account-model REST schema](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) and existing-setting merge behavior follows the [Azure CLI implementation](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli/azure/cli/command_modules/appservice/static_sites.py).

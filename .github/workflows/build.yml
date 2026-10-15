@@ -12,6 +12,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: python3 tests/setup_azure_npc_brains_test.py
       - run: npm run build
       - run: npm run test:api
       - run: npx playwright install --with-deps chromium

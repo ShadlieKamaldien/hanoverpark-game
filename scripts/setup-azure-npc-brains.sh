@@ -4,7 +4,12 @@ set +x
 set -euo pipefail
 
 azure_npc_api_key=''
-trap 'unset azure_npc_api_key' EXIT
+azure_npc_workdir=''
+cleanup() {
+  unset azure_npc_api_key
+  if [[ -n $azure_npc_workdir ]]; then rm -rf -- "$azure_npc_workdir"; fi
+}
+trap cleanup EXIT
 
 usage() {
   cat <<'HELP'
@@ -77,17 +82,20 @@ command -v python3 >/dev/null || fail 'Python 3 is required (included in Azure C
 [[ $azure_npc_rpm =~ ^[1-6]$ ]] || fail 'The global request limit must be 1-6.'
 [[ $azure_npc_client_rpm =~ ^[1-4]$ ]] || fail 'The client request limit must be 1-4.'
 
-azure_npc_subscription=$(az account show --only-show-errors --output json) || fail 'Run az login, then select your subscription.'
+# Azure catalogues can exceed Linux's per-argument/environment-string limit.
+# Keep response JSON in a private directory; only short selectors enter env/argv.
+azure_npc_workdir=$(mktemp -d "${TMPDIR:-/tmp}/hanover-npc-setup.XXXXXX") || fail 'Could not create a temporary metadata directory.'
+az account show --only-show-errors --output json > "$azure_npc_workdir/subscription.json" || fail 'Run az login, then select your subscription.'
 [[ $(az cloud show --query name --output tsv --only-show-errors) == AzureCloud ]] ||
   fail 'This setup and API support the public Azure cloud (AzureCloud).'
-azure_npc_subscription_id=$(AZURE_NPC_JSON="$azure_npc_subscription" python3 -c 'import json,os; print(json.loads(os.environ["AZURE_NPC_JSON"])["id"])')
-azure_npc_subscription_name=$(AZURE_NPC_JSON="$azure_npc_subscription" python3 -c 'import json,os; x=json.loads(os.environ["AZURE_NPC_JSON"]); print(x.get("name", x["id"]))')
+azure_npc_subscription_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$azure_npc_workdir/subscription.json")
+azure_npc_subscription_name=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); print(x.get("name", x["id"]))' "$azure_npc_workdir/subscription.json")
 
 if [[ -z $azure_npc_static_app ]]; then
-  azure_npc_apps=$(az staticwebapp list --output json --only-show-errors)
-  azure_npc_target=$(AZURE_NPC_JSON="$azure_npc_apps" python3 - <<'PY'
+  az staticwebapp list --output json --only-show-errors > "$azure_npc_workdir/apps.json"
+  azure_npc_target=$(python3 - "$azure_npc_workdir/apps.json" <<'PY'
 import json, os, sys
-apps = json.loads(os.environ['AZURE_NPC_JSON'])
+apps = json.load(open(sys.argv[1]))
 repo = 'https://github.com/shadliekamaldien/hanoverpark-game'
 matches = []
 for app in apps:
@@ -110,7 +118,7 @@ PY
   ) || fail 'Could not select exactly one game Static Web App; no resource was created.'
   IFS=$'\t' read -r azure_npc_static_app azure_npc_group <<< "$azure_npc_target"
 fi
-azure_npc_app=$(az staticwebapp show --name "$azure_npc_static_app" --resource-group "$azure_npc_group" --output json --only-show-errors) ||
+az staticwebapp show --name "$azure_npc_static_app" --resource-group "$azure_npc_group" --output json --only-show-errors > "$azure_npc_workdir/app.json" ||
   fail 'The specified Static Web App does not exist or is not accessible in the selected subscription.'
 
 if [[ -z $azure_npc_resource ]]; then
@@ -127,15 +135,17 @@ printf 'Subscription: %s\nStatic Web App: %s / %s\nAzure OpenAI: %s (%s)\nModel:
   "$azure_npc_subscription_name" "$azure_npc_group" "$azure_npc_static_app" "$azure_npc_resource" "$azure_npc_location" "$azure_npc_model" "$azure_npc_deployment"
 printf 'Azure OpenAI requests are token-billed. The Static Web App tier will remain unchanged.\n'
 
-azure_npc_accounts=$(az cognitiveservices account list --resource-group "$azure_npc_group" --output json --only-show-errors)
-azure_npc_existing=$(AZURE_NPC_JSON="$azure_npc_accounts" AZURE_NPC_NAME="$azure_npc_resource" python3 -c '
-import json,os
-items=[x for x in json.loads(os.environ["AZURE_NPC_JSON"]) if x.get("name", "").lower()==os.environ["AZURE_NPC_NAME"].lower()]
-print(json.dumps(items[0]) if items else "")')
-if [[ -n $azure_npc_existing ]]; then
-  AZURE_NPC_JSON="$azure_npc_existing" AZURE_NPC_LOCATION="$azure_npc_location" python3 - <<'PY' || fail 'Existing resource differs from the requested OpenAI configuration; choose another --resource-name or the correct --location.'
+az cognitiveservices account list --resource-group "$azure_npc_group" --output json --only-show-errors > "$azure_npc_workdir/accounts.json"
+AZURE_NPC_NAME="$azure_npc_resource" python3 - "$azure_npc_workdir/accounts.json" "$azure_npc_workdir/existing-account.json" <<'PY'
 import json, os, sys
-x=json.loads(os.environ['AZURE_NPC_JSON'])
+items=[x for x in json.load(open(sys.argv[1])) if x.get('name', '').lower()==os.environ['AZURE_NPC_NAME'].lower()]
+with open(sys.argv[2], 'w') as selected:
+    if items: json.dump(items[0], selected)
+PY
+if [[ -s $azure_npc_workdir/existing-account.json ]]; then
+  AZURE_NPC_LOCATION="$azure_npc_location" python3 - "$azure_npc_workdir/existing-account.json" <<'PY' || fail 'Existing resource differs from the requested OpenAI configuration; choose another --resource-name or the correct --location.'
+import json, os, sys
+x=json.load(open(sys.argv[1]))
 if x.get('kind') != 'OpenAI' or str(x.get('location', '')).replace(' ', '').lower() != os.environ['AZURE_NPC_LOCATION'] or x.get('sku', {}).get('name') != 'S0':
     sys.exit(1)
 PY
@@ -150,15 +160,17 @@ else
     --output none --only-show-errors || fail 'OpenAI account creation failed. Check resource permissions, region support and global subdomain availability.'
 fi
 
-azure_npc_deployments=$(az cognitiveservices account deployment list --name "$azure_npc_resource" --resource-group "$azure_npc_group" --output json --only-show-errors)
-azure_npc_existing_deployment=$(AZURE_NPC_JSON="$azure_npc_deployments" AZURE_NPC_NAME="$azure_npc_deployment" python3 -c '
-import json,os
-items=[x for x in json.loads(os.environ["AZURE_NPC_JSON"]) if x.get("name")==os.environ["AZURE_NPC_NAME"]]
-print(json.dumps(items[0]) if items else "")')
-if [[ -n $azure_npc_existing_deployment ]]; then
-  AZURE_NPC_JSON="$azure_npc_existing_deployment" AZURE_NPC_MODEL="$azure_npc_model" AZURE_NPC_VERSION="$azure_npc_version" AZURE_NPC_SKU="$azure_npc_sku" python3 - <<'PY' || fail 'Existing deployment has a different model/version/SKU; choose a new --deployment name. It was not modified.'
+az cognitiveservices account deployment list --name "$azure_npc_resource" --resource-group "$azure_npc_group" --output json --only-show-errors > "$azure_npc_workdir/deployments.json"
+AZURE_NPC_NAME="$azure_npc_deployment" python3 - "$azure_npc_workdir/deployments.json" "$azure_npc_workdir/existing-deployment.json" <<'PY'
 import json, os, sys
-x=json.loads(os.environ['AZURE_NPC_JSON']); model=x.get('properties', {}).get('model', {})
+items=[x for x in json.load(open(sys.argv[1])) if x.get('name')==os.environ['AZURE_NPC_NAME']]
+with open(sys.argv[2], 'w') as selected:
+    if items: json.dump(items[0], selected)
+PY
+if [[ -s $azure_npc_workdir/existing-deployment.json ]]; then
+  AZURE_NPC_MODEL="$azure_npc_model" AZURE_NPC_VERSION="$azure_npc_version" AZURE_NPC_SKU="$azure_npc_sku" python3 - "$azure_npc_workdir/existing-deployment.json" <<'PY' || fail 'Existing deployment has a different model/version/SKU; choose a new --deployment name. It was not modified.'
+import json, os, sys
+x=json.load(open(sys.argv[1])); model=x.get('properties', {}).get('model', {})
 sku=x.get('sku', {}).get('name')
 if model.get('format') != 'OpenAI' or model.get('name') != os.environ['AZURE_NPC_MODEL'] or sku not in ('GlobalStandard','Standard'):
     sys.exit(1)
@@ -169,12 +181,11 @@ if os.environ['AZURE_NPC_SKU'] and sku != os.environ['AZURE_NPC_SKU']:
 PY
   printf 'Reusing the matching deployment without upgrading its model or changing capacity.\n'
 else
-  azure_npc_models=$(az cognitiveservices account list-models --name "$azure_npc_resource" --resource-group "$azure_npc_group" --output json --only-show-errors)
-  azure_npc_usage=$(az cognitiveservices account list-usage --name "$azure_npc_resource" --resource-group "$azure_npc_group" --output json --only-show-errors)
-  azure_npc_selection=$(AZURE_NPC_MODELS="$azure_npc_models" AZURE_NPC_USAGE="$azure_npc_usage" \
-    AZURE_NPC_MODEL="$azure_npc_model" AZURE_NPC_VERSION="$azure_npc_version" AZURE_NPC_SKU="$azure_npc_sku" AZURE_NPC_CAPACITY="$azure_npc_capacity" python3 - <<'PY'
+  az cognitiveservices account list-models --name "$azure_npc_resource" --resource-group "$azure_npc_group" --output json --only-show-errors > "$azure_npc_workdir/models.json"
+  az cognitiveservices account list-usage --name "$azure_npc_resource" --resource-group "$azure_npc_group" --output json --only-show-errors > "$azure_npc_workdir/usage.json"
+  azure_npc_selection=$(AZURE_NPC_MODEL="$azure_npc_model" AZURE_NPC_VERSION="$azure_npc_version" AZURE_NPC_SKU="$azure_npc_sku" AZURE_NPC_CAPACITY="$azure_npc_capacity" python3 - "$azure_npc_workdir/models.json" "$azure_npc_workdir/usage.json" <<'PY'
 import datetime, json, math, os, sys
-models=json.loads(os.environ['AZURE_NPC_MODELS']); usages=json.loads(os.environ['AZURE_NPC_USAGE'])
+models=json.load(open(sys.argv[1])); usages=json.load(open(sys.argv[2]))
 if isinstance(models, dict): models=models.get('value', [])
 if isinstance(usages, dict): usages=usages.get('value', [])
 requested=int(os.environ['AZURE_NPC_CAPACITY']); wanted=os.environ['AZURE_NPC_MODEL']; pinned=os.environ['AZURE_NPC_VERSION']
