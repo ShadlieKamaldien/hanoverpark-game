@@ -1,13 +1,11 @@
 import { Scene } from "@babylonjs/core/scene";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Collision, type Polygon } from "../game/systems/collision";
 import { BUILDINGS, PREVIEW, SPAWN, toWorld } from "./map";
 import type { MapPoint } from "../game/world/mapData";
 import { PROPERTY_SOLIDS } from "./properties";
+import { CharacterRig } from "./characterRig";
 
 const BODY_RADIUS = 3.2;
 const SOURCE_PIXELS_PER_METRE = 8;
@@ -19,8 +17,7 @@ export class PreviewPlayer {
   readonly mesh: TransformNode;
   readonly position = { x: SPAWN.x, y: SPAWN.y };
   readonly shadowCasters: Mesh[] = [];
-  private readonly materials: StandardMaterial[] = [];
-  private readonly limbs: TransformNode[] = [];
+  readonly rig: CharacterRig;
   private readonly collision = new Collision(
     [],
     [...BUILDINGS.map((building) => ({
@@ -28,11 +25,7 @@ export class PreviewPlayer {
       holes: building.holes,
     })), ...PROPERTY_SOLIDS],
   );
-  private gait = 0;
-  private idleTime = 0;
   private trafficCollision = new Collision([]);
-  private readonly shirt: StandardMaterial;
-  private shirtColour = "#dda93c";
   private vehicleOccupied = false;
 
   get inVehicle() { return this.vehicleOccupied; }
@@ -47,17 +40,14 @@ export class PreviewPlayer {
     this.mesh.position.z += -s * 0.4 + c * 0.08;
     this.mesh.position.y = -0.32;
     this.mesh.rotation.set(0, heading, 0);
-    for (let i = 0; i < this.limbs.length; i++) {
-      this.limbs[i].rotation.set(i % 2 === 0 ? -0.8 : -1.35, 0, 0);
-    }
+    this.rig.seat();
   }
 
   leaveVehicle(position: MapPoint) {
     this.vehicleOccupied = false;
     Object.assign(this.position, position);
     this.mesh.position.copyFrom(toWorld(position));
-    this.gait = 0;
-    for (const limb of this.limbs) limb.rotation.set(0, 0, 0);
+    this.rig.reset();
   }
 
   setTrafficSolids(polygons: Polygon[]) {
@@ -65,60 +55,21 @@ export class PreviewPlayer {
   }
 
   setCrewColour(colour: string | null) {
-    const next = colour ?? "#dda93c";
-    if (next === this.shirtColour) return;
-    this.shirtColour = next;
-    this.shirt.diffuseColor.copyFrom(Color3.FromHexString(next));
+    this.rig.setShirtColour(colour ?? "#d2a44c");
   }
 
   constructor(scene: Scene) {
     this.mesh = new TransformNode("preview-player", scene);
-    const skin = this.material(scene, "skin", "#9b6449");
-    const shirt = this.shirt = this.material(scene, "shirt", "#dda93c");
-    const trousers = this.material(scene, "trousers", "#283741");
-    const shoes = this.material(scene, "shoes", "#1c242a");
-    const hair = this.material(scene, "hair", "#241d1a");
-    const eye = this.material(scene, "eyes", "#251d18");
-
-    this.box(scene, "torso", 0.47, 0.58, 0.28, 0, 1.18, 0, shirt);
-    this.box(scene, "hips", 0.41, 0.23, 0.26, 0, 0.82, 0, trousers);
-    this.box(scene, "neck", 0.105, 0.13, 0.1, 0, 1.48, 0, skin);
-    const head = MeshBuilder.CreateSphere(
-      "preview-player-head",
-      { diameter: 0.285, segments: 12 },
-      scene,
-    );
-    head.scaling.y = 1.08;
-    head.position.set(0, 1.635, 0);
-    this.attach(head, this.mesh, skin);
-    const hairCap = MeshBuilder.CreateSphere(
-      "preview-player-hair",
-      { diameter: 0.291, segments: 12 },
-      scene,
-    );
-    hairCap.scaling.y = 0.57;
-    hairCap.position.set(0, 1.705, -0.018);
-    this.attach(hairCap, this.mesh, hair);
-    this.box(scene, "nose", 0.045, 0.055, 0.047, 0, 1.63, 0.143, skin);
-    for (const side of [-1, 1]) {
-      this.box(scene, `eye-${side}`, 0.024, 0.021, 0.012, side * 0.055, 1.675, 0.13, eye);
-      const arm = new TransformNode(`preview-player-arm-${side}`, scene);
-      arm.parent = this.mesh;
-      arm.position.set(side * 0.295, 1.4, 0);
-      this.limbs.push(arm);
-      this.box(scene, `sleeve-${side}`, 0.17, 0.25, 0.21, 0, -0.12, 0, shirt, arm);
-      this.box(scene, `forearm-${side}`, 0.105, 0.31, 0.115, 0, -0.365, 0, skin, arm);
-      this.box(scene, `hand-${side}`, 0.11, 0.125, 0.11, 0, -0.55, 0.014, skin, arm);
-
-      const leg = new TransformNode(`preview-player-leg-${side}`, scene);
-      leg.parent = this.mesh;
-      leg.position.set(side * 0.12, 0.77, 0);
-      this.limbs.push(leg);
-      this.box(scene, `upper-leg-${side}`, 0.18, 0.38, 0.205, 0, -0.18, 0, trousers, leg);
-      this.box(scene, `lower-leg-${side}`, 0.16, 0.34, 0.175, 0, -0.52, 0, trousers, leg);
-      this.box(scene, `shoe-${side}`, 0.205, 0.14, 0.33, 0, -0.70, 0.055, shoes, leg);
-    }
+    this.rig = new CharacterRig(scene, this.mesh);
+    this.shadowCasters.push(this.rig.mesh);
     this.reset();
+  }
+
+  /** Animate the conversation pose without moving or accepting held keys. */
+  converse(dt: number) {
+    if (this.vehicleOccupied) return;
+    this.rig.update(dt, 0, false, "talk");
+    this.mesh.position.copyFrom(toWorld(this.position));
   }
 
   update(
@@ -171,37 +122,24 @@ export class PreviewPlayer {
         Math.cos(facing - this.mesh.rotation.y),
       );
       this.mesh.rotation.y += turn * Math.min(1, elapsed * 14);
-      this.gait += travelled * (sprinting ? 6.4 : 8.2);
     }
-    this.idleTime += elapsed;
-    const moving = travelled > 0.0001;
-    const swing = moving ? Math.sin(this.gait) * (sprinting ? 0.8 : 0.5) : 0;
-    // Limb order is left arm, left leg, right arm, right leg.
-    this.limbs[0].rotation.x = -swing;
-    this.limbs[1].rotation.x = swing;
-    this.limbs[2].rotation.x = swing;
-    this.limbs[3].rotation.x = -swing;
-    this.limbs[0].rotation.z = 0.075;
-    this.limbs[2].rotation.z = -0.075;
+    const bob = this.rig.update(elapsed, travelled, sprinting) ?? 0;
     this.mesh.position.copyFrom(toWorld(this.position));
-    this.mesh.position.y += moving ? Math.abs(Math.sin(this.gait)) * 0.035 :
-      Math.sin(this.idleTime * 2.3) * 0.004;
+    this.mesh.position.y += bob;
   }
 
   reset() {
     this.vehicleOccupied = false;
     this.position.x = SPAWN.x;
     this.position.y = SPAWN.y;
-    this.gait = 0;
-    this.idleTime = 0;
+    this.rig.reset();
     this.mesh.position.copyFrom(toWorld(this.position));
     this.mesh.rotation.set(0, 0, 0);
-    for (const limb of this.limbs) limb.rotation.set(0, 0, 0);
   }
 
   dispose() {
+    this.rig.dispose();
     this.mesh.dispose(false, false);
-    for (const material of this.materials) material.dispose();
   }
 
   private clampToPreview() {
@@ -216,37 +154,4 @@ export class PreviewPlayer {
     );
   }
 
-  private material(scene: Scene, name: string, color: string) {
-    const material = new StandardMaterial(`preview-player-${name}`, scene);
-    material.diffuseColor = Color3.FromHexString(color);
-    material.specularColor = new Color3(0.08, 0.08, 0.08);
-    this.materials.push(material);
-    return material;
-  }
-
-  private box(
-    scene: Scene,
-    name: string,
-    width: number,
-    height: number,
-    depth: number,
-    x: number,
-    y: number,
-    z: number,
-    material: StandardMaterial,
-    parent = this.mesh,
-  ) {
-    const mesh = MeshBuilder.CreateBox(`preview-player-${name}`, { width, height, depth }, scene);
-    mesh.position.set(x, y, z);
-    this.attach(mesh, parent, material);
-    return mesh;
-  }
-
-  private attach(mesh: Mesh, parent: TransformNode, material: StandardMaterial) {
-    mesh.parent = parent;
-    mesh.material = material;
-    mesh.isPickable = false;
-    mesh.receiveShadows = true;
-    this.shadowCasters.push(mesh);
-  }
 }

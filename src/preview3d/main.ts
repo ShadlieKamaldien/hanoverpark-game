@@ -62,11 +62,11 @@ function startPreview() {
   const maps = new NeighbourhoodMaps(ui.minimap, ui.areaMap, properties.placements.map((property) => property.footprint));
   const interactionCollision = new Collision([], [...BUILDINGS.map((building) => ({ points: building.points, holes: building.holes })), ...PROPERTY_SOLIDS]);
   const target = () => (car.occupied ? car.actor.root.position : player.mesh.position).add(new Vector3(0, 1.1, 0));
-  const views = { street: { beta: 1.18, radius: 18 }, overview: { beta: 0.72, radius: 48 } };
+  const views = { street: { beta: 1.26, radius: 6.5 }, overview: { beta: 0.72, radius: 48 } };
   const drivingViews = { street: { beta: 1.12, radius: 12 }, overview: views.overview };
   let viewPreset: ViewPreset = "street";
   const camera = new ArcRotateCamera("following-camera", -Math.PI / 2, views.street.beta, views.street.radius, target(), scene);
-  camera.lowerRadiusLimit = 8;
+  camera.lowerRadiusLimit = 2;
   camera.upperRadiusLimit = 90;
   camera.lowerBetaLimit = 0.2;
   camera.upperBetaLimit = 1.43;
@@ -349,7 +349,7 @@ function startPreview() {
     orbitGrace = 0;
     camera.alpha = -Math.PI / 2 - (car.occupied ? car.heading : 0);
     const view = (car.occupied ? drivingViews : views)[viewPreset];
-    camera.lowerRadiusLimit = car.occupied ? 2 : 8;
+    camera.lowerRadiusLimit = 2;
     camera.beta = view.beta;
     camera.radius = view.radius;
     drivingCamera.reset(view.radius);
@@ -430,9 +430,10 @@ function startPreview() {
             }
           } else player.update(dt, keys, camera.getForwardRay().direction);
         }
+        if (ui.dialogueOpen) player.converse(dt);
         camera.setTarget(Vector3.Lerp(camera.target, target(), Math.min(1, dt * 12)), false, false, true);
       }
-      drivingCamera.update(dt, !frozen && car.occupied);
+      drivingCamera.update(dt, !frozen && (car.occupied || viewPreset === "street"));
       npcs.update(dt, player.position, !started || paused || ui.mapOpen, car.occupied);
       brains.update(dt, player.position, !frozen);
       sun.position.copyFrom(target().subtract(sun.direction.scale(100)));

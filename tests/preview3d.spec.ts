@@ -188,7 +188,9 @@ test("3D walking and sprinting respect rotated walls and open courtyards, pause 
   });
   expect(orbit.alpha).toBeCloseTo(initialOrbit.alpha, 5);
   expect(orbit.beta).toBeCloseTo(initialOrbit.beta, 5);
-  expect(orbit.radius).toBeCloseTo(initialOrbit.radius, 5);
+  // The closer street camera now pulls inward when its view meets a wall.
+  expect(orbit.radius).toBeLessThanOrEqual(initialOrbit.radius + 0.001);
+  expect(orbit.radius).toBeGreaterThanOrEqual(2);
   await position(page, open.centre);
   await page.keyboard.down("Shift");
   let sprint!: Awaited<ReturnType<typeof sampleMovement>>;
